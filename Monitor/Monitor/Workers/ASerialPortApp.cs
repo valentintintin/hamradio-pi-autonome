@@ -35,10 +35,12 @@ public abstract class ASerialPortApp : AWorker
     {
         if (_simulate)
         {
+            SerialMessageService.Simulate = true;
+            
             string[] lines = _fakeInput.Split('\n');
             var currentLine = 0;
 
-            AddDisposable(Scheduler.SchedulePeriodic(TimeSpan.FromMilliseconds(2500), () => 
+            AddDisposable(Scheduler.SchedulePeriodic(TimeSpan.FromMilliseconds(10000), () => 
             {
                 var input = lines[currentLine++];
                 

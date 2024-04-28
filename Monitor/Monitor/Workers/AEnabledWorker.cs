@@ -16,7 +16,7 @@ public abstract class AEnabledWorker : AWorker
 
     public override Task StartAsync(CancellationToken cancellationToken)
     {
-        Observable.Interval(RetryDuration).Select(_ => Enabled.Value)
+        Observable.Timer(TimeSpan.Zero, RetryDuration).Select(_ => Enabled.Value)
             .Merge(Enabled.ValueChanges().Select(v => v.value))
             .SubscribeAsync(async state =>
             {

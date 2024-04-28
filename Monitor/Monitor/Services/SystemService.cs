@@ -39,7 +39,7 @@ public class SystemService(ILogger<SystemService> logger, SerialMessageService s
             return;
         }
         
-        if (dateTime.Year != 2023)
+        if (dateTime.Year != 2024)
         {
             Logger.LogWarning("Change dateTime impossible because incoherent {dateTime}", dateTime);
             return;

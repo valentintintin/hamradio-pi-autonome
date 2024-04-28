@@ -204,7 +204,7 @@
                 date = m.CreatedAt.ToFrench().ToString(CultureInfo.CurrentCulture),
                 type = "Température",
                 value = m.Temperature
-            },
+            }
         }).ToList();
         
         DataWeatherPressure = weatherData.SelectMany(m => new List<LineChartData<float>>
@@ -214,7 +214,7 @@
                 date = m.CreatedAt.ToFrench().ToString(CultureInfo.CurrentCulture),
                 type = "Pression",
                 value = m.Pressure
-            },
+            }
         }).ToList();
     }
 
@@ -242,7 +242,7 @@
         {
             Label = new BaseAxisLabel
             {
-                Visible = true,
+                Visible = true
             },
             Title = new BaseAxisTitle
             {
@@ -250,7 +250,7 @@
                 Visible = true
             },
             Visible = true,
-            Min = 11,
+            Min = 11
         },
         Legend = new Legend
         {
@@ -270,7 +270,7 @@
         {
             Label = new BaseAxisLabel
             {
-                Visible = true,
+                Visible = true
             },
             Title = new BaseAxisTitle
             {
@@ -297,7 +297,7 @@
         {
             Label = new BaseAxisLabel
             {
-                Visible = true,
+                Visible = true
             },
             Title = new BaseAxisTitle
             {
@@ -326,7 +326,7 @@
         {
             Label = new BaseAxisLabel
             {
-                Visible = true,
+                Visible = true
             },
             Title = new BaseAxisTitle
             {
@@ -354,7 +354,7 @@
         {
             Label = new BaseAxisLabel
             {
-                Visible = true,
+                Visible = true
             },
             Title = new BaseAxisTitle
             {

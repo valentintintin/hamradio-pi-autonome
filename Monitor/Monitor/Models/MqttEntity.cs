@@ -7,22 +7,23 @@ namespace Monitor.Models;
 public interface IStringConfigEntity
 {
     string Id { get; }
-    bool Retain { get; }
-    bool Mqtt { get; }
-    bool HasReceivedFromElsewere { get; }
+    bool SaveInBdd { get; }
+    bool SendToMqtt { get; }
+    bool ChangeWithAck { get; }
 
     IObservable<string> ValueStringAsync();
+    IObservable<string> ValueToChangeStringAsync();
     string ValueAsString();
     bool SetFromStringPayload(string? payload);
-    void SetValueToInitialValue();
+    void ClearValueToChange();
 }
 
 public class ConfigEntity<T> : IStringConfigEntity
 {
     public string Id { get; }
-    public bool Retain { get; }
-    public bool Mqtt { get; }
-    public bool HasReceivedFromElsewere { get; private set; }
+    public bool SaveInBdd { get; }
+    public bool SendToMqtt { get; }
+    public bool ChangeWithAck { get; }
 
     public T? Value
     {
@@ -30,16 +31,19 @@ public class ConfigEntity<T> : IStringConfigEntity
         set => SetValue(value);
     }
     private T? ValuePrivate { get; set; }
+    private T? ValueToChangePrivate { get; set; }
     private T? OldValue { get; set; }
     
     private readonly Subject<(T? old, T? value)> _valueSubject = new();
+    private readonly Subject<(T? value, T? valueToChange)> _valueToChangeSubject = new();
     private readonly T? _initialValue;
 
-    public ConfigEntity(string id, bool retain = false, T? initialValue = default, bool mqtt = false)
+    public ConfigEntity(string id, bool saveInBdd = false, T? initialValue = default, bool sendToMqtt = false, bool changeWithAck = false)
     {
-        Retain = retain;
-        Mqtt = mqtt;
+        SaveInBdd = saveInBdd;
+        SendToMqtt = sendToMqtt;
         Id = id;
+        ChangeWithAck = changeWithAck;
         OldValue = ValuePrivate = _initialValue = initialValue;
         SetValue(initialValue);
     }
@@ -51,9 +55,21 @@ public class ConfigEntity<T> : IStringConfigEntity
             .Select(v => (v.old, v.value, Id));
     }
 
+    public IObservable<(T? value, T? valueToChange, string id)> ValueToChange(bool onlyIfDifferent = true)
+    {
+        return _valueToChangeSubject.AsObservable()
+            .Where(v => !onlyIfDifferent || v.value?.Equals(v.valueToChange) != true)
+            .Select(v => (v.value, v.valueToChange, Id));
+    }
+
     public IObservable<string> ValueStringAsync()
     {
         return _valueSubject.AsObservable().Select(v => JsonSerializer.Serialize(v.value));
+    }
+
+    public IObservable<string> ValueToChangeStringAsync()
+    {
+        return _valueToChangeSubject.AsObservable().Select(v => JsonSerializer.Serialize(v.valueToChange));
     }
 
     public string ValueAsString()
@@ -61,18 +77,24 @@ public class ConfigEntity<T> : IStringConfigEntity
         return JsonSerializer.Serialize(ValuePrivate);
     }
 
-    public void SetValue(T? state)
+    public void SetValue(T? state, bool force = false)
     {
+        if (ChangeWithAck && !force)
+        {
+            ValueToChangePrivate = state;
+            _valueToChangeSubject.OnNext((ValuePrivate, ValueToChangePrivate));
+            return;
+        }
+        
         OldValue = ValuePrivate;
         ValuePrivate = state;
+        ValueToChangePrivate = default;
         
         _valueSubject.OnNext((OldValue, ValuePrivate));
     }
 
     public bool SetFromStringPayload(string? payload)
     {
-        HasReceivedFromElsewere = true;
-        
         var newValue = string.IsNullOrWhiteSpace(payload) ? default : JsonSerializer.Deserialize<T?>(payload);
 
         if (newValue?.Equals(ValuePrivate) != true)
@@ -88,6 +110,11 @@ public class ConfigEntity<T> : IStringConfigEntity
     public void SetValueToInitialValue()
     {
         Value = _initialValue;
+    }
+
+    public void ClearValueToChange()
+    {
+        ValueToChangePrivate = default;
     }
 
     public bool IsTrue()
@@ -112,6 +139,6 @@ public class ConfigEntity<T> : IStringConfigEntity
 
     public override string ToString()
     {
-        return $"{Id} => {Value}";
+        return $"{Id} => {(ValueToChangePrivate != null ? $"({ValueToChangePrivate}) => " : "")}{Value}";
     }
 }

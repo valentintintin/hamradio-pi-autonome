@@ -7,7 +7,8 @@ namespace Monitor.Services;
 
 public class SerialMessageService(ILogger<SerialMessageService> logger) : AService(logger)
 {
-    public static SerialPort? SerialPort;
+    public static SerialPort? SerialPort { get; set; }
+    public static bool Simulate { get; set; }
 
     public Message ParseMessage(string input)
     {
@@ -21,7 +22,7 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
         {
             if (input.Contains("lora")) // because APRS can have char " in string and we do not escape it in C++
             {
-                var payloadString = "payload\":\"";
+                const string payloadString = "payload\":\"";
                 
                 message = new LoraData
                 {
@@ -163,14 +164,19 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
 
     public void SendCommand(string command)
     {
+        Logger.LogInformation("Send Serial Command {command}", command);
+
+        if (Simulate)
+        {
+            return;
+        }
+        
         if (SerialPort == null)
         {
             Logger.LogError("Send Serial Command impossible {command}", command);
             return;
         }
-
-        Logger.LogInformation("Send Serial Command {command}", command);
-
+        
         try
         {
             SerialPort.WriteLine(command);

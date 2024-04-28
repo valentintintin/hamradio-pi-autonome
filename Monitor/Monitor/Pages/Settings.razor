@@ -10,10 +10,9 @@
 
 @inject CameraCaptureApp CameraCaptureApp
 @inject GpioApp GpioApp
-@inject MpptApp MpptApp
-@inject BatteryApp BatteryApp
 @inject WatchdogApp WatchdogApp
 @inject AprsIsApp AprsIsApp
+@inject MeshtasticApp MeshtasticApp
 
 @implements IDisposable
 
@@ -127,6 +126,7 @@
     <GridCol Md="24" Lg="12">
         <Card Title="LoRa TX">
             <Body>
+            <Switch @bind-Checked="MeshtasticApp.Enabled.Value" CheckedChildren="Meshtastic TX activé" UnCheckedChildren="Meshtastic TX désactivé"></Switch>
             <Switch @bind-Checked="AprsIsApp.Enabled.Value" CheckedChildren="Igate TX activé" UnCheckedChildren="Igate TX désactivé"></Switch>
             <Input @bind-Value="LoRaTxPayload" Placeholder="Payload"/>
             <Button Type="@ButtonType.Primary" HtmlType="button" OnClick="SendLoRa">

@@ -78,7 +78,7 @@ public class CameraService : AService
 
         try
         {
-            List<(string path, FswebcamParameters parameters)> imagesCamera = CaptureAllCameras();
+            var imagesCamera = CaptureAllCameras();
 
             Logger.LogDebug("We have {count} photos", imagesCamera.Count);
 
@@ -271,7 +271,7 @@ public class CameraService : AService
         Logger.LogTrace("convert {command}", parameters.ToString());
 
         process.Start();
-        if (!process.WaitForExit(TimeSpan.FromMinutes(1)))
+        if (!process.WaitForExit(TimeSpan.FromMinutes(2)))
         {
             process.Kill();
         }
@@ -282,6 +282,8 @@ public class CameraService : AService
         
         if (!string.IsNullOrWhiteSpace(errorStream))
         {
+            Logger.LogError("Convert error with exit code {ProcessExitCode}. Command: {convertParametersters}. {OutputStreamStringamString}", process.ExitCode, parameters, streamString);
+            
             throw new WebcamException($"ImageMagick error with exit code {process.ExitCode}.\n\nCommand:\n\nconvert {parameters}.\n\nOutput:\n\n{streamString}");
         }
     }

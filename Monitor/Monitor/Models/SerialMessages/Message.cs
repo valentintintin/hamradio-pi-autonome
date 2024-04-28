@@ -19,7 +19,7 @@ public class Message
     public override string ToString()
     {
         var type = GetType();
-        PropertyInfo[] properties = type.GetProperties();
+        var properties = type.GetProperties();
 
         var result = "";
         foreach (var property in properties)

@@ -8,8 +8,12 @@ case $1 in
     server="192.168.1.241"
     port=22
     ;;
-"usb")
+"usb7")
     server="192.168.7.2"
+    port=22
+    ;;
+"usb6")
+    server="192.168.6.2"
     port=22
     ;;
 esac

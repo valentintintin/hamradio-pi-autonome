@@ -29,15 +29,15 @@ public class MonitorService(
                 
                 State.McuSystem = systemData;
                 
-                EntitiesManagerService.Entities.McuStatus.SetValue(systemData.State);
-                EntitiesManagerService.Entities.StatusBoxOpened.SetValue(systemData.BoxOpened);
-                EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.SetValue(systemData.WatchdogSafetyEnabled);
-                EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.SetValue(systemData.AprsDigipeaterEnabled);
-                EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.SetValue(systemData.AprsTelemetryEnabled);
-                EntitiesManagerService.Entities.FeatureAprsPositionEnabled.SetValue(systemData.AprsPositionEnabled);
-                EntitiesManagerService.Entities.FeatureSleepEnabled.SetValue(systemData.Sleep);
-                EntitiesManagerService.Entities.TemperatureRtc.SetValue(systemData.TemperatureRtc);
-                EntitiesManagerService.Entities.McuUptime.SetValue(systemData.UptimeTimeSpan);
+                EntitiesManagerService.Entities.McuStatus.SetValue(systemData.State, true);
+                EntitiesManagerService.Entities.StatusBoxOpened.SetValue(systemData.BoxOpened, true);
+                EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.SetValue(systemData.WatchdogSafetyEnabled, true);
+                EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.SetValue(systemData.AprsDigipeaterEnabled, true);
+                EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.SetValue(systemData.AprsTelemetryEnabled, true);
+                EntitiesManagerService.Entities.FeatureAprsPositionEnabled.SetValue(systemData.AprsPositionEnabled, true);
+                EntitiesManagerService.Entities.FeatureSleepEnabled.SetValue(systemData.Sleep, true);
+                EntitiesManagerService.Entities.TemperatureRtc.SetValue(systemData.TemperatureRtc, true);
+                EntitiesManagerService.Entities.McuUptime.SetValue(systemData.UptimeTimeSpan, true);
                 
                 systemService.SetTime(State.McuSystem.DateTime.DateTime);
                 break;
@@ -46,15 +46,15 @@ public class MonitorService(
 
                 State.Weather = weatherData;
                 
-                EntitiesManagerService.Entities.WeatherTemperature.SetValue(weatherData.Temperature);
-                EntitiesManagerService.Entities.WeatherHumidity.SetValue(weatherData.Humidity);
-                EntitiesManagerService.Entities.WeatherPressure.SetValue(weatherData.Pressure);
+                EntitiesManagerService.Entities.WeatherTemperature.SetValue(weatherData.Temperature, true);
+                EntitiesManagerService.Entities.WeatherHumidity.SetValue(weatherData.Humidity, true);
+                EntitiesManagerService.Entities.WeatherPressure.SetValue(weatherData.Pressure, true);
 
                 context.Add(new Weather
                 {
                     Temperature = weatherData.Temperature,
                     Humidity = weatherData.Humidity,
-                    Pressure = weatherData.Pressure,
+                    Pressure = weatherData.Pressure
                 });
                 await context.SaveChangesAsync();
                 break;
@@ -63,21 +63,21 @@ public class MonitorService(
 
                 State.Mppt = mpptData;
                 
-                EntitiesManagerService.Entities.BatteryVoltage.SetValue(mpptData.BatteryVoltage);
-                EntitiesManagerService.Entities.BatteryCurrent.SetValue(mpptData.BatteryCurrent);
-                EntitiesManagerService.Entities.SolarVoltage.SetValue(mpptData.SolarVoltage);
-                EntitiesManagerService.Entities.SolarCurrent.SetValue(mpptData.SolarCurrent);
-                EntitiesManagerService.Entities.MpptChargeCurrent.SetValue(mpptData.CurrentCharge);
-                EntitiesManagerService.Entities.MpptStatus.SetValue(mpptData.StatusString);
-                EntitiesManagerService.Entities.SolarIsDay.SetValue(!mpptData.Night);
-                EntitiesManagerService.Entities.MpptAlertShutdown.SetValue(mpptData.Alert);
-                EntitiesManagerService.Entities.MpptPowerEnabled.SetValue(mpptData.PowerEnabled);
-                EntitiesManagerService.Entities.WatchdogEnabled.SetValue(mpptData.WatchdogEnabled);
-                EntitiesManagerService.Entities.WatchdogCounter.SetValue(TimeSpan.FromSeconds(mpptData.WatchdogCounter));
-                EntitiesManagerService.Entities.WatchdogPowerOffTime.SetValue(TimeSpan.FromSeconds(mpptData.WatchdogPowerOffTime));
-                EntitiesManagerService.Entities.MpptPowerOffVoltage.SetValue(mpptData.PowerOffVoltage);
-                EntitiesManagerService.Entities.MpptPowerOnVoltage.SetValue(mpptData.PowerOnVoltage);
-                EntitiesManagerService.Entities.MpptTemperature.SetValue(mpptData.Temperature);
+                EntitiesManagerService.Entities.BatteryVoltage.SetValue(mpptData.BatteryVoltage, true);
+                EntitiesManagerService.Entities.BatteryCurrent.SetValue(mpptData.BatteryCurrent, true);
+                EntitiesManagerService.Entities.SolarVoltage.SetValue(mpptData.SolarVoltage, true);
+                EntitiesManagerService.Entities.SolarCurrent.SetValue(mpptData.SolarCurrent, true);
+                EntitiesManagerService.Entities.MpptChargeCurrent.SetValue(mpptData.CurrentCharge, true);
+                EntitiesManagerService.Entities.MpptStatus.SetValue(mpptData.StatusString, true);
+                EntitiesManagerService.Entities.SolarIsDay.SetValue(!mpptData.Night, true);
+                EntitiesManagerService.Entities.MpptAlertShutdown.SetValue(mpptData.Alert, true);
+                EntitiesManagerService.Entities.MpptPowerEnabled.SetValue(mpptData.PowerEnabled, true);
+                EntitiesManagerService.Entities.WatchdogEnabled.SetValue(mpptData.WatchdogEnabled, true);
+                EntitiesManagerService.Entities.WatchdogCounter.SetValue(TimeSpan.FromSeconds(mpptData.WatchdogCounter), true);
+                EntitiesManagerService.Entities.WatchdogPowerOffTime.SetValue(TimeSpan.FromSeconds(mpptData.WatchdogPowerOffTime), true);
+                EntitiesManagerService.Entities.MpptPowerOffVoltage.SetValue(mpptData.PowerOffVoltage, true);
+                EntitiesManagerService.Entities.MpptPowerOnVoltage.SetValue(mpptData.PowerOnVoltage, true);
+                EntitiesManagerService.Entities.MpptTemperature.SetValue(mpptData.Temperature, true);
 
                 context.Add(new Mppt
                 {
@@ -101,9 +101,9 @@ public class MonitorService(
 
                 State.Gpio = gpioData;
                 
-                EntitiesManagerService.Entities.GpioWifi.SetValue(gpioData.Wifi);
-                EntitiesManagerService.Entities.GpioNpr.SetValue(gpioData.Npr);
-                EntitiesManagerService.Entities.GpioBoxLdr.SetValue(gpioData.Ldr);
+                EntitiesManagerService.Entities.GpioWifi.SetValue(gpioData.Wifi, true);
+                EntitiesManagerService.Entities.GpioNpr.SetValue(gpioData.Npr, true);
+                EntitiesManagerService.Entities.GpioBoxLdr.SetValue(gpioData.Ldr, true);
 
                 context.Add(new Context.Entities.System
                 {
@@ -123,13 +123,13 @@ public class MonitorService(
                 {
                     State.Lora.LastTx.Add(loraData);
                 
-                    EntitiesManagerService.Entities.LoraTxPayload.SetValue(loraData.Payload);
+                    EntitiesManagerService.Entities.LoraTxPayload.SetValue(loraData.Payload, true);
                 }
                 else
                 {
                     State.Lora.LastRx.Add(loraData);
                 
-                    EntitiesManagerService.Entities.LoraRxPayload.SetValue(loraData.Payload);
+                    EntitiesManagerService.Entities.LoraRxPayload.SetValue(loraData.Payload, true);
                 }
 
                 string? sender = null;
@@ -148,7 +148,8 @@ public class MonitorService(
                 {
                     Sender = sender,
                     Frame = loraData.Payload,
-                    IsTx = loraData.IsTx
+                    IsTx = loraData.IsTx,
+                    IsMeshtastic = false
                 });
                 await context.SaveChangesAsync();
                 break;
@@ -163,10 +164,10 @@ public class MonitorService(
 
         if (State.System != null)
         {
-            EntitiesManagerService.Entities.SystemUptime.SetValue(State.System.UptimeTimeSpan);
-            EntitiesManagerService.Entities.SystemCpu.SetValue(State.System.Cpu);
-            EntitiesManagerService.Entities.SystemRam.SetValue(State.System.Ram);
-            EntitiesManagerService.Entities.SystemDisk.SetValue(State.System.Disk);
+            EntitiesManagerService.Entities.SystemUptime.SetValue(State.System.UptimeTimeSpan, true);
+            EntitiesManagerService.Entities.SystemCpu.SetValue(State.System.Cpu, true);
+            EntitiesManagerService.Entities.SystemRam.SetValue(State.System.Ram, true);
+            EntitiesManagerService.Entities.SystemDisk.SetValue(State.System.Disk, true);
         }
     }
 }

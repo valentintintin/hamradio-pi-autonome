@@ -28,6 +28,10 @@ config-pin p9.21 uart
 config-pin p9.22 uart
 stty -F /dev/ttyS2 38400
 
+config-pin p9.11 uart
+config-pin p9.13 uart
+stty -F /dev/ttyS4 115200
+
 # rtc
 #echo ds3231 0x68 > /sys/class/i2c-adapter/i2c-2/new_device
 #hwclock -s -f /dev/rtc1

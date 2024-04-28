@@ -21,7 +21,6 @@ public class EntitiesManagerService : AService, IAsyncDisposable
     private readonly IConfigurationSection _configurationSection;
     private readonly IMqttClient _mqttClient;
     private readonly DataContext _context;
-    private readonly List<IStringConfigEntity> _entities = [];
     private readonly IScheduler _scheduler;
 
     public EntitiesManagerService(ILogger<EntitiesManagerService> logger, 
@@ -32,8 +31,8 @@ public class EntitiesManagerService : AService, IAsyncDisposable
         _topicBase = _configurationSection.GetValueOrThrow<string>("TopicBase");
         _clientId = _configurationSection.GetValueOrThrow<string>("ClientId");
         _mqttClient = new MqttFactory().CreateMqttClient();
-        _scheduler = serviceProvider.CreateScope().ServiceProvider.GetRequiredService<IScheduler>();
         _context = contextFactory.CreateDbContext();
+        _scheduler = serviceProvider.CreateScope().ServiceProvider.GetRequiredService<IScheduler>();
         
         foreach (var property in typeof(MqttEntities).GetProperties())
         {
@@ -60,50 +59,6 @@ public class EntitiesManagerService : AService, IAsyncDisposable
             await Task.Delay(TimeSpan.FromSeconds(5));
             await ConnectMqtt();
         };
-        
-        // Observable.FromEvent<Func<MqttApplicationMessageReceivedEventArgs, Task>, MqttApplicationMessageReceivedEventArgs>(
-        //         handler => args =>
-        //         {
-        //             handler(args);
-        //             return Task.CompletedTask;
-        //         },
-        //         h => _mqttClient.ApplicationMessageReceivedAsync += h,
-        //         h => _mqttClient.ApplicationMessageReceivedAsync -= h
-        //     )
-        //     .Select(m =>
-        //     {
-        //         string id = m.ApplicationMessage.Topic.Replace($"{_topicBase}/", "");
-        //     
-        //         IMqttEntity? entity = _entities.FirstOrDefault(entity => entity.Id == id);
-        //         string payload = Encoding.UTF8.GetString(m.ApplicationMessage.PayloadSegment);
-        //
-        //         if (entity != null)
-        //         {
-        //             return new
-        //             {
-        //                 entity,
-        //                 payload
-        //             };
-        //         }
-        //
-        //         Logger.LogError("From MQTT topic {topicId} not found with payload {payload}", id, payload);
-        //         return null;
-        //     })
-        //     .Where(m => m != null)
-        //     .Subscribe(m =>
-        //     {
-        //         try
-        //         {
-        //             if (m!.entity.SetFromMqttPayload(m.payload))
-        //             {
-        //                 Logger.LogInformation("Change from MQTT entity {entityId} to {payload}", m.entity.Id, m.payload);
-        //             }
-        //         }
-        //         catch (Exception e)
-        //         {
-        //             Logger.LogError(e, "Change from MQTT error entity {entityId} to {payload}", m!.entity.Id, m.payload);
-        //         }
-        //     });
     }
 
     public async Task ConnectMqtt()
@@ -116,33 +71,21 @@ public class EntitiesManagerService : AService, IAsyncDisposable
             .WithClientId(_clientId)
             .WithProtocolVersion(MqttProtocolVersion.V500)
             .Build());
-
-        // foreach (IMqttEntity entity in _entities.Where(e => e is { Retain: true, HasReceivedFromMqtt: false }))
-        // {
-        //     _scheduler.Schedule(TimeSpan.FromSeconds(5), () =>
-        //     {
-        //         if (!entity.HasReceivedFromMqtt)
-        //         {
-        //             Logger.LogInformation("No MQTT data received for entity {entity} so we set to its initial value", entity.Id);
-        //             entity.SetValueToInitialValue();
-        //         }
-        //     });
-        // }
     }
 
     public void Add(IStringConfigEntity configEntity)
     {
-        _entities.Add(configEntity);
-        
         var config = _context.Configs.FirstOrDefault(c => c.Name == configEntity.Id);
-        if (config == null && configEntity.Retain)
+        if (config == null && configEntity.SaveInBdd)
         {
-            Logger.LogDebug("Add entity {entity} with value {value}", configEntity.Id, configEntity.ValueAsString());
+            var value = configEntity.ValueAsString();
+            
+            Logger.LogTrace("Add entity {entity} with value {value}", configEntity.Id, value);
 
             config = new Config
             {
                 Name = configEntity.Id,
-                Value = configEntity.ValueAsString()
+                Value = value
             };
             
             _context.Add(config);
@@ -157,7 +100,7 @@ public class EntitiesManagerService : AService, IAsyncDisposable
         configEntity.ValueStringAsync()
             .SubscribeAsync(async value =>
             {
-                Logger.LogDebug("Update {entityId} to {state}", configEntity.Id, value);
+                Logger.LogTrace("Update {entityId} to {state}", configEntity.Id, value);
 
                 if (config != null)
                 {
@@ -165,18 +108,32 @@ public class EntitiesManagerService : AService, IAsyncDisposable
                     await _context.SaveChangesAsync();
                 }
                 
-                if (configEntity.Mqtt && _mqttClient.IsConnected)
+                if (configEntity.SendToMqtt && _mqttClient.IsConnected)
                 {
-                    Logger.LogDebug("Send MQTT {entityId} to {state}", configEntity.Id, value);
+                    Logger.LogTrace("Send MQTT {entityId} to {state}", configEntity.Id, value);
 
                     var mqttApplicationMessage = new MqttApplicationMessageBuilder()
                         .WithTopic($"{_topicBase}/{configEntity.Id}")
                         .WithPayload(value)
-                        .WithRetainFlag(configEntity.Retain);
+                        .WithRetainFlag(configEntity.SaveInBdd);
 
                     await _mqttClient.PublishAsync(mqttApplicationMessage.Build());
                 }
             });
+
+        if (configEntity.ChangeWithAck)
+        {
+            IDisposable? disposable = null;
+            
+            configEntity.ValueToChangeStringAsync().Subscribe(_ =>
+            {
+                disposable?.Dispose();
+                disposable = _scheduler.Schedule(TimeSpan.FromSeconds(5), _ =>
+                {
+                    configEntity.ClearValueToChange();
+                });
+            });
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -200,11 +157,11 @@ public record MqttEntities
     public ConfigEntity<float> TemperatureRtc { get; } = new("mcu/temperature_rtc", false, default, true);
     public ConfigEntity<TimeSpan> McuUptime { get; } = new("mcu/uptime", false, default, true);
     
-    public ConfigEntity<bool> FeatureWatchdogSafetyEnabled { get; } = new("feature/watchdog_safety");
-    public ConfigEntity<bool> FeatureAprsDigipeaterEnabled { get; } = new("feature/aprs_digipeater");
-    public ConfigEntity<bool> FeatureAprsTelemetryEnabled { get; } = new("feature/aprs_telemetry");
-    public ConfigEntity<bool> FeatureAprsPositionEnabled { get; } = new("feature/aprs_position");
-    public ConfigEntity<bool> FeatureSleepEnabled { get; } = new("feature/sleep");
+    public ConfigEntity<bool> FeatureWatchdogSafetyEnabled { get; } = new("feature/watchdog_safety", true, false, false, true);
+    public ConfigEntity<bool> FeatureAprsDigipeaterEnabled { get; } = new("feature/aprs_digipeater", true, true, false, true);
+    public ConfigEntity<bool> FeatureAprsTelemetryEnabled { get; } = new("feature/aprs_telemetry", true, true, false, true);
+    public ConfigEntity<bool> FeatureAprsPositionEnabled { get; } = new("feature/aprs_position", true, true, false, true);
+    public ConfigEntity<bool> FeatureSleepEnabled { get; } = new("feature/sleep", true, false, false, true);
 
     public ConfigEntity<float> WeatherTemperature { get; } = new("weather/temperature", false, default, true);
     public ConfigEntity<float> WeatherHumidity { get; } = new("weather/humidity", false, default, true);
@@ -220,13 +177,13 @@ public record MqttEntities
     public ConfigEntity<string> MpptStatus { get; } = new("mppt/status");
     public ConfigEntity<bool> MpptAlertShutdown { get; } = new("mppt/alert_shutdown", false, default, true);
     public ConfigEntity<bool> MpptPowerEnabled { get; } = new("mppt/power_enabled");
-    public ConfigEntity<int> MpptPowerOffVoltage { get; } = new("mppt/power_off_voltage", true, 11500);
-    public ConfigEntity<int> MpptPowerOnVoltage { get; } = new("mppt/power_on_voltage", true, 12500);
+    public ConfigEntity<int> MpptPowerOffVoltage { get; } = new("mppt/power_off_voltage", true, 11500, false, true);
+    public ConfigEntity<int> MpptPowerOnVoltage { get; } = new("mppt/power_on_voltage", true, 12500, false, true);
     public ConfigEntity<float> MpptTemperature { get; } = new("mppt/temperature", false, default, true);
     
     public ConfigEntity<bool> WatchdogEnabled { get; } = new("watchdog/enabled", false, default, true);
     public ConfigEntity<TimeSpan> WatchdogCounter { get; } = new("watchdog/counter");
-    public ConfigEntity<TimeSpan> WatchdogPowerOffTime { get; } = new("watchdog/power_off_time");
+    public ConfigEntity<TimeSpan> WatchdogPowerOffTime { get; } = new("watchdog/power_off_time", false, default, true);
 
     public ConfigEntity<string> LoraTxPayload { get; } = new("lora/tx_payload", false, default, true);
 

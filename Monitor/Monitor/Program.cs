@@ -46,6 +46,7 @@ builder.Services.AddSingleton<CameraCaptureApp>();
 builder.Services.AddSingleton<SerialPortMcuCommandsApp>();
 builder.Services.AddSingleton<AprsIsApp>();
 builder.Services.AddSingleton<McuFeatureApp>();
+builder.Services.AddSingleton<MeshtasticApp>();
 
 builder.Services.AddHostedService(services => services.GetRequiredService<MpptApp>());
 builder.Services.AddHostedService(services => services.GetRequiredService<GpioApp>());
@@ -55,6 +56,7 @@ builder.Services.AddHostedService(services => services.GetRequiredService<Batter
 builder.Services.AddHostedService(services => services.GetRequiredService<CameraCaptureApp>());
 builder.Services.AddHostedService(services => services.GetRequiredService<AprsIsApp>());
 builder.Services.AddHostedService(services => services.GetRequiredService<McuFeatureApp>());
+builder.Services.AddHostedService(services => services.GetRequiredService<MeshtasticApp>());
 
 builder.Services.AddHostedService<MqttConnect>();
 

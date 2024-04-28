@@ -14,4 +14,6 @@ public class LoRa : IEntity
     public required string Frame { get; set; }
     
     public required bool IsTx { get; set; }
+    
+    public required bool IsMeshtastic { get; set; }
 }

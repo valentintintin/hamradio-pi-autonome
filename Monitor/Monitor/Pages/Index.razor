@@ -147,7 +147,7 @@
                 @foreach (var message in _loraLastHeards)
                 {
                     <TimelineItem>
-                        <strong>@message.Sender - @message.ReceivedAt.ToFrench().ToString(CultureInfo.CurrentCulture)</strong>
+                        <strong>@message.Type - @message.Sender - @message.ReceivedAt.ToFrench().ToString(CultureInfo.CurrentCulture)</strong>
                         <pre>@message.Payload</pre>
                     </TimelineItem>
                 }
@@ -164,7 +164,7 @@
                 @foreach (var message in _loras)
                 {
                     <TimelineItem  Color="@(message.IsTx ? "red" : "green")">
-                        <strong>@message.ReceivedAt.ToFrench().ToString(CultureInfo.CurrentCulture) - @(message.IsTx ? "TX" : "RX")</strong>
+                        <strong>@message.Type - @message.ReceivedAt.ToFrench().ToString(CultureInfo.CurrentCulture) - @(message.IsTx ? "TX" : "RX")</strong>
                         <pre>@message.Payload</pre>
                     </TimelineItem>
                 }
@@ -208,7 +208,7 @@
             .Take(10)
             .Select(l => new LoraData
             {
-                Type = "lora", 
+                Type = l.IsMeshtastic ? "Meshtastic" : "APRS", 
                 State = l.IsTx ? "tx" : "rx",
                 Payload = l.Frame,
                 ReceivedAt = l.CreatedAt
@@ -220,7 +220,7 @@
                 (sender, frames) => frames.OrderByDescending(l => l.Id).First())
             .Select(l => new LoraData
             {
-                Type = "lora", 
+                Type = l.IsMeshtastic ? "Meshtastic" : "APRS", 
                 State = "rx",
                 Payload = l.Frame,
                 ReceivedAt = l.CreatedAt

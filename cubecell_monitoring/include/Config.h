@@ -8,7 +8,7 @@
 
 //#define USE_SCREEN
 #define USE_SOFT_SERIAL
-#define USE_RF false
+#define USE_RF true
 #define USE_RTC true
 #define SET_RTC 0
 
@@ -48,7 +48,7 @@
 #define APRS_LATITUDE 45.325776
 #define APRS_LONGITUDE 5.63658087
 #define APRS_ALTITUDE 830
-#define APRS_COMMENT "Cam, Meteo, Digi"
+#define APRS_COMMENT "Digi, Meteo"
 #define APRS_STATUS "f4hvv.valentin-saugnier.fr"
 
 #define PIN_WIFI GPIO0

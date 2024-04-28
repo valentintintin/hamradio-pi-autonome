@@ -235,7 +235,7 @@ bool MpptMonitor::setWatchdog(uint16_t powerOffTime, uint8_t timeoutTime) {
 
         watchdogPowerOffTime = powerOffTime;
 
-        if (!charger.setWatchdogTimeout(WATCHDOG_TIMEOUT)) {
+        if (!charger.setWatchdogTimeout(timeoutTime)) {
             system->serialError(PSTR("[MPPT_WATCHDOG]Change watchdog counter error"));
             system->displayText(PSTR("Mttp error"), PSTR("Failed to set watchdog counter"));
             init = false;
@@ -243,7 +243,7 @@ bool MpptMonitor::setWatchdog(uint16_t powerOffTime, uint8_t timeoutTime) {
             return false;
         }
 
-        watchdogCounter = WATCHDOG_TIMEOUT;
+        watchdogCounter = timeoutTime;
     }
 
     if (!charger.setWatchdogEnable(enabled)) {

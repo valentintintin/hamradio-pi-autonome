@@ -29,8 +29,8 @@ public class MpptApp : AWorker
                 await _systemService.Shutdown();
             }));
 
-        AddDisposable(powerOffVoltageConfigEntity.ValueChanges()
-            .Merge(powerOnVoltageConfigEntity.ValueChanges())
+        AddDisposable(powerOffVoltageConfigEntity.ValueToChange()
+            .Merge(powerOnVoltageConfigEntity.ValueToChange())
             .Subscribe(_ =>
             {
                 _serialMessageService.SetPowerOnOffVoltage(

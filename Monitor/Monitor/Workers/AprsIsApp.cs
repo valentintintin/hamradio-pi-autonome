@@ -84,9 +84,10 @@ public class AprsIsApp : AEnabledWorker
     {
         if (_objectPosition != null)
         {
-            SendBeaconObjectPacket(false);
-
-            await Task.Delay(1500);
+            if (SendBeaconObjectPacket(false))
+            {
+                await Task.Delay(1500);
+            }
         }
 
         _aprsIsClient.Disconnect();
@@ -97,6 +98,13 @@ public class AprsIsApp : AEnabledWorker
     private void ComputeReceivedPacket(Packet packet)
     {
         Logger.LogDebug("Received APRS-IS Packet from {from} to {to} of type {type}", packet.Sender, packet.Destination, packet.InfoField.Type);
+
+        if (packet.Sender == _callsign)
+        {
+            Logger.LogDebug("It's our packet so ignored");
+            
+            return;
+        }
         
         if (packet.Path.Contains("?") || packet.Path.Contains("qAX") || packet.Path.Contains("RFONLY") ||
             packet.Path.Contains("NOGATE") || packet.Path.Contains("TCPXX"))
@@ -135,16 +143,36 @@ public class AprsIsApp : AEnabledWorker
         }
         
         var lastHeard = DateTime.UtcNow - _durationHeard.Value;
-        return _context.LoRas.Any(e => !e.IsTx && e.CreatedAt >= lastHeard);
+        return _context.LoRas.Any(e => !e.IsTx && e.CreatedAt >= lastHeard && !e.IsMeshtastic);
     }
 
-    private void SendBeaconObjectPacket(bool alive = true)
+    private bool SendBeaconObjectPacket(bool alive = true)
     {
+        if (_aprsIsClient.State != ConnectionState.LoggedIn)
+        {
+            Logger.LogWarning("Impossible to send beacon because not logged");
+
+            Start();
+            
+            return false;
+        }
+
         var comment = alive ? $"{_objectComment} Up:{EntitiesManagerService.Entities.SystemUptime.Value}" : "Éteint";
         var packet = $"{_callsign}>TCPIP:){_objectName}{(alive ? '!' : '_')}{_objectPosition!.Encode()}{comment}";
         
         Logger.LogInformation("Send packet beacon object alive ? {alive} : {packet}", alive, packet);
 
-        _tcpConnection.SendString(packet + "\n");
+        try
+        {
+            _tcpConnection.SendString(packet + "\n");
+
+            return true;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Impossible to send beacon");
+
+            return false;
+        }
     }
 }

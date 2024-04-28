@@ -16,7 +16,7 @@ public abstract class AWorker : IHostedService, IAsyncDisposable
     protected readonly EntitiesManagerService EntitiesManagerService;
     private readonly List<IDisposable> _disposables = [];
     
-    protected static readonly TimeSpan RetryDuration = TimeSpan.FromSeconds(5);
+    protected TimeSpan RetryDuration = TimeSpan.FromSeconds(5);
 
     protected AWorker(ILogger<AWorker> logger, IServiceProvider serviceProvider)
     {
@@ -28,7 +28,7 @@ public abstract class AWorker : IHostedService, IAsyncDisposable
     
     public virtual Task StartAsync(CancellationToken cancellationToken)
     {
-        AddDisposable(Observable.Interval(RetryDuration).Where(_ => !Started).SubscribeAsync(async _ =>
+        AddDisposable(Observable.Timer(TimeSpan.Zero, RetryDuration).Where(_ => !Started).SubscribeAsync(async _ =>
         {
             try
             {

@@ -23,21 +23,21 @@ public class GpioApp : AWorker
 
     protected override Task Start()
     {
-        AddDisposable(EntitiesManagerService.Entities.GpioWifi.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.GpioWifi.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("GPIO wifi => {value}", v))
             .Select(v => v.value)
             .Subscribe(_serialMessageService.SetWifi)
         );
         
-        AddDisposable(EntitiesManagerService.Entities.GpioNpr.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.GpioNpr.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("GPIO npr => {value}", v))
             .Select(v => v.value)
             .Subscribe(_serialMessageService.SetNpr)
         );
 
-        Observable.Timer(TimeSpan.FromSeconds(2)).Select(_ => true)
+        Observable.Timer(TimeSpan.FromSeconds(2)).Take(1).Select(_ => true)
             .Merge(
                 EntitiesManagerService.Entities.McuStatus.ValueChanges()
                 .Select(v => v.value)
@@ -54,12 +54,12 @@ public class GpioApp : AWorker
         
             if (StartWifiTurnOn.Value != EntitiesManagerService.Entities.GpioWifi.Value)
             {
-                EntitiesManagerService.Entities.GpioWifi.SetValue(StartWifiTurnOn.Value);
+                EntitiesManagerService.Entities.GpioWifi.Value = StartWifiTurnOn.Value;
             }
         
             if (StartNprTurnOn.Value != EntitiesManagerService.Entities.GpioNpr.Value)
             {
-                EntitiesManagerService.Entities.GpioNpr.SetValue(StartNprTurnOn.Value);
+                EntitiesManagerService.Entities.GpioNpr.Value = StartNprTurnOn.Value;
             }
         });
 

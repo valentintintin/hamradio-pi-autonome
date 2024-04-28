@@ -15,35 +15,35 @@ public class McuFeatureApp : AWorker
 
     protected override Task Start()
     {
-        AddDisposable(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("Watchdog Safety => {value}", v))
             .Select(v => v.value)
             .Subscribe(_serialMessageService.SetWatchdogSafety)
         );
         
-        AddDisposable(EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("APRS DigiPeater => {value}", v))
             .Select(v => v.value)
             .Subscribe(_serialMessageService.SetAprsDigipeater)
         );
         
-        AddDisposable(EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("APRS Telemetry => {value}", v))
             .Select(v => v.value)
             .Subscribe(_serialMessageService.SetAprsTelemetry)
         );
         
-        AddDisposable(EntitiesManagerService.Entities.FeatureAprsPositionEnabled.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.FeatureAprsPositionEnabled.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("APRS Position => {value}", v))
             .Select(v => v.value)
             .Subscribe(_serialMessageService.SetAprsPosition)
         );
 
-        AddDisposable(EntitiesManagerService.Entities.FeatureSleepEnabled.ValueChanges()
+        AddDisposable(EntitiesManagerService.Entities.FeatureSleepEnabled.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("Sleep => {value}", v))
             .Select(v => v.value)
