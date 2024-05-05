@@ -46,7 +46,7 @@ public class BatteryApp : AWorker
         _systemService = Services.GetRequiredService<SystemService>();
     }
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
     {
         AddDisposable(EntitiesManagerService.Entities.BatteryVoltage.ValueChanges()
             .Select(v => v.value)

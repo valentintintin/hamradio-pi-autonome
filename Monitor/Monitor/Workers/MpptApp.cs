@@ -16,7 +16,7 @@ public class MpptApp : AWorker
         _serialMessageService = Services.GetRequiredService<SerialMessageService>();
     }
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
     {
         var powerOnVoltageConfigEntity = EntitiesManagerService.Entities.MpptPowerOnVoltage;
         var powerOffVoltageConfigEntity = EntitiesManagerService.Entities.MpptPowerOffVoltage;

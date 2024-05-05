@@ -24,7 +24,7 @@ public class WatchdogApp : AEnabledWorker
         _serialMessageService.SetWatchdog(TimeSpan.FromSeconds(10));
     }
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
     {
         AddDisposable(_scheduler.SchedulePeriodic(TimeSpan.FromSeconds(5), () =>
         {

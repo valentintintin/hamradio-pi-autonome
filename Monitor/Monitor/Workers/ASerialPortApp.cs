@@ -31,16 +31,16 @@ public abstract class ASerialPortApp : AWorker
 
     protected abstract Task MessageReceived(string input);
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
     {
         if (_simulate)
         {
             SerialMessageService.Simulate = true;
             
-            string[] lines = _fakeInput.Split('\n');
+            var lines = _fakeInput.Split('\n');
             var currentLine = 0;
 
-            AddDisposable(Scheduler.SchedulePeriodic(TimeSpan.FromMilliseconds(10000), () => 
+            AddDisposable(Scheduler.SchedulePeriodic(TimeSpan.FromMilliseconds(25000), () => 
             {
                 var input = lines[currentLine++];
                 

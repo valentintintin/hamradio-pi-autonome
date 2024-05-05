@@ -32,12 +32,21 @@ public abstract class AWorker : IHostedService, IAsyncDisposable
         {
             try
             {
-                await Start();
+                await Start(cancellationToken);
                 Started = true;
             }
             catch (Exception e)
             {
                 Logger.LogCritical(e, "Crash of worker, retry in {duration}", RetryDuration);
+                
+                try
+                {
+                    await Stop();
+                }
+                catch (Exception ee)
+                {
+                    Logger.LogWarning(ee, "Crash during stop of worker after crash");
+                }
             }
         }));
         
@@ -67,7 +76,7 @@ public abstract class AWorker : IHostedService, IAsyncDisposable
         return disposable;
     }
     
-    protected abstract Task Start();
+    protected abstract Task Start(CancellationToken cancellationToken);
 
     protected virtual Task Stop()
     {

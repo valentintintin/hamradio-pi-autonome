@@ -21,7 +21,7 @@ public class GpioApp : AWorker
         EntitiesManagerService.Add(StartNprTurnOn);
     }
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
     {
         AddDisposable(EntitiesManagerService.Entities.GpioWifi.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))

@@ -38,7 +38,7 @@ public class CameraCaptureApp : AEnabledWorker
         }
     }
 
-    protected override async Task Start()
+    protected override async Task Start(CancellationToken cancellationToken)
     {
         await Do();
 

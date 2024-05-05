@@ -13,7 +13,7 @@ public class McuFeatureApp : AWorker
         _serialMessageService = Services.GetRequiredService<SerialMessageService>();
     }
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
     {
         AddDisposable(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueToChange()
             .Sample(TimeSpan.FromSeconds(1))

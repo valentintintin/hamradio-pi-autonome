@@ -73,11 +73,15 @@ public class AprsIsApp : AEnabledWorker
         }
     }
 
-    protected override Task Start()
+    protected override Task Start(CancellationToken cancellationToken)
+    {
+        Connect();
+        return Task.CompletedTask;
+    }
+
+    private void Connect()
     {
         AddDisposable(_aprsIsClient.Receive(_callsign, _passcode, _server, _filter));
-        
-        return Task.CompletedTask;
     }
 
     protected override async Task Stop()
@@ -152,7 +156,7 @@ public class AprsIsApp : AEnabledWorker
         {
             Logger.LogWarning("Impossible to send beacon because not logged");
 
-            Start();
+            Connect();
             
             return false;
         }

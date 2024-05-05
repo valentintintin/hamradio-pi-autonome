@@ -162,28 +162,30 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
         SendCommand($"set {address} {value}");
     }
 
-    public void SendCommand(string command)
+    public bool SendCommand(string command)
     {
         Logger.LogInformation("Send Serial Command {command}", command);
 
         if (Simulate)
         {
-            return;
+            return true;
         }
         
         if (SerialPort == null)
         {
             Logger.LogError("Send Serial Command impossible {command}", command);
-            return;
+            return false;
         }
         
         try
         {
             SerialPort.WriteLine(command);
+            return true;
         }
         catch (Exception e)
         {
             Logger.LogError(e, "Send Serial Command in error {command}", command);
+            return false;
         }
     }
 }

@@ -1,33 +1,49 @@
 using System.Reactive.Concurrency;
+using System.Text.Json;
+using Google.Protobuf;
 using Meshtastic.Connections;
 using Meshtastic.Data;
 using Meshtastic.Data.MessageFactories;
 using Meshtastic.Protobufs;
+using Microsoft.EntityFrameworkCore;
+using Monitor.Context;
+using Monitor.Context.Entities;
 using Monitor.Extensions;
 using Monitor.Services;
-using Position = Meshtastic.Protobufs.Position;
+using Exception = System.Exception;
 
 namespace Monitor.Workers;
 
 public class MeshtasticApp : AEnabledWorker
 {
+    private readonly SerialMessageService _serialMessageService;
+    private readonly DataContext _context;
     private readonly string _path;
     private readonly int _speed;
-    private readonly bool _simulate;
     private readonly double _latitude, _longitude;
     private readonly int _altitude;
-    private readonly ToRadioMessageFactory _toRadioMessageFactory = new();
-    private DeviceConnection? _deviceConnection;
+    private readonly bool _telemEnabled, _echoEnabled;
+    private readonly uint _channelEcho;
     
+    private SerialConnection? _deviceConnection;
+
     public MeshtasticApp(ILogger<MeshtasticApp> logger, IServiceProvider serviceProvider,
-        IConfiguration configuration) : base(logger, serviceProvider)
+        IConfiguration configuration, IDbContextFactory<DataContext> contextFactory,
+        SerialMessageService serialMessageService) : base(logger, serviceProvider)
     {
+        _serialMessageService = serialMessageService;
+        _context = contextFactory.CreateDbContext();
+        
         RetryDuration = TimeSpan.FromSeconds(30);
             
-        var configurationSection = configuration.GetSection("SerialPortMeshtastic");
+        var configurationSection = configuration.GetSection("Meshtastic");
         _path = configurationSection.GetValueOrThrow<string>("Path");
         _speed = configurationSection.GetValue("Speed", 38400);
-        _simulate = configurationSection.GetValue("Simulate", false);
+        
+        _telemEnabled = configurationSection.GetValue("TelemetryEnabled", false);
+        
+        _echoEnabled = configurationSection.GetValue("EchoEnabled", false);
+        _channelEcho = (uint)configurationSection.GetValue("ChannelEcho", 0);
         
         var positionSection = configuration.GetSection("Position");
         _latitude = positionSection.GetValueOrThrow<double>("Latitude");
@@ -35,86 +51,194 @@ public class MeshtasticApp : AEnabledWorker
         _altitude = positionSection.GetValueOrThrow<int>("Altitude");
     }
 
-    protected override async Task Start()
+    protected override async Task Start(CancellationToken cancellationToken)
     {
-        if (_simulate)
-        {
-            _deviceConnection = new SimulatedConnection(Logger);
-        }
-        else
-        {
-            _deviceConnection = new SerialConnection(Logger, _path, _speed);
-        }
-        await SendWeather();
+        _deviceConnection = new SerialConnection(Logger, _path, _speed);
+        await _deviceConnection.Start();
 
         AddDisposable(
-            Scheduler.SchedulePeriodic(TimeSpan.FromHours(1), async () =>
-            {
-                await SendWeather();
-            })
+            Scheduler.SchedulePeriodic(TimeSpan.FromMinutes(15), SendWeather)
         );
         
         AddDisposable(
-            Scheduler.SchedulePeriodic(TimeSpan.FromDays(1), async () =>
-            {
-                await SetPosition();
-            })
+            Scheduler.SchedulePeriodic(TimeSpan.FromDays(1), SetPosition)
         );
-        
+
+        _deviceConnection.MessageRecieved += PacketReceived;
+
         // await SetPosition();
     }
 
     protected override Task Stop()
     {
-        _deviceConnection?.Disconnect();
-        
+        try
+        {
+            _deviceConnection?.Disconnect();
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning(e, "Impossible to disconnect Meshtastic Serial Port");
+        }
+
         return base.Stop();
     }
 
-    private async Task<DeviceStateContainer> GetContainer()
+    private void PacketReceived(object? sender, MessageRecievedEventArgs e)
     {
         if (_deviceConnection == null)
         {
             throw new Exception("No connection");
         }
-        
-        var wantConfig = new ToRadioMessageFactory().CreateWantConfigMessage();
-        return await _deviceConnection.WriteToRadio(wantConfig, async (_, _) =>
+
+        if (e.Message.Packet == null)
         {
-            await Task.Delay(500);
-            return true;
+            return;
+        }
+        
+        _context.Add(new LoRa
+        {
+            Frame = JsonSerializer.Serialize(new {
+                Payload = e.Message.Packet.Decoded.Payload.ToStringUtf8(),
+                Raw = e.Message,
+            }),
+            Sender = e.DeviceStateContainer.GetNodeDisplayName(e.Message.Packet.From),
+            IsTx = false,
+            IsMeshtastic = true
         });
+        _context.SaveChanges();
+        
+        DoEcho(e.Message);
     }
 
-    private async Task SendWeather()
+    private void DoEcho(FromRadio radio)
+    {
+        if (!_echoEnabled)
+        {
+            return;
+        }
+        
+        if (_deviceConnection == null)
+        {
+            throw new Exception("No connection");
+        }
+        
+        var packet = radio.Packet;
+        var packetDecoded = packet.Decoded;
+
+        if (packet.From == _deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum || packet.Channel != _channelEcho || packetDecoded is not { Portnum: PortNum.TextMessageApp })
+        {
+            return;
+        }
+        
+        var payloadString = packetDecoded.Payload.ToStringUtf8();
+
+        if (!payloadString.StartsWith('?'))
+        {
+            return;
+        }
+                
+        var textMessageFactory = new TextMessageFactory(_deviceConnection.DeviceStateContainer);
+        var textMessagePacket = textMessageFactory.CreateTextMessagePacket($">{payloadString}");
+        textMessagePacket.To = packet.From;
+        textMessagePacket.Channel = packet.Channel;
+
+        Logger.LogTrace("Sending echo message {message}", payloadString);
+
+        Send(textMessagePacket);
+    }
+
+    private void DoCommand(FromRadio radio)
     {
         if (_deviceConnection == null)
         {
             throw new Exception("No connection");
         }
         
-        var textMessageFactory = new TextMessageFactory(await GetContainer());
-        var textMessage = textMessageFactory.CreateTextMessagePacket($"{EntitiesManagerService.Entities.WeatherTemperature.Value}°C {EntitiesManagerService.Entities.WeatherHumidity.Value}% {EntitiesManagerService.Entities.WeatherPressure.Value}hPa {EntitiesManagerService.Entities.MpptChargeCurrent.Value}mA {EntitiesManagerService.Entities.BatteryVoltage.Value}mV");
-        textMessage.WantAck = false;
-        
-        Logger.LogInformation("Sending telemetry message to primary channel");
+        var packet = radio.Packet;
+        var packetDecoded = packet.Decoded;
 
-        await _deviceConnection.WriteToRadio(_toRadioMessageFactory.CreateMeshPacketMessage(textMessage), 
-            (_, _) =>
+        if (packet.To != _deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum || packetDecoded is not { Portnum: PortNum.TextMessageApp })
+        {
+            return;
+        }
+        
+        var payloadString = packetDecoded.Payload.ToStringUtf8();
+
+        if (!payloadString.StartsWith('!'))
+        {
+            return;
+        }
+
+        if (_serialMessageService.SendCommand(payloadString.TrimStart('!')))
+        {
+            payloadString += " OK";
+        }
+        else
+        {
+            payloadString += " KO";
+        }
+        
+        var textMessageFactory = new TextMessageFactory(_deviceConnection.DeviceStateContainer);
+        var textMessagePacket = textMessageFactory.CreateTextMessagePacket($">{payloadString}");
+        textMessagePacket.To = packet.From;
+        textMessagePacket.Channel = packet.Channel;
+        
+        Logger.LogTrace("Sending ack command for {command}", payloadString);
+
+        Send(textMessagePacket);
+    }
+
+    private void SendWeather()
+    {
+        if (!_telemEnabled)
+        {
+            return;
+        }
+        
+        if (_deviceConnection == null)
+        {
+            throw new Exception("No connection");
+        }
+        
+        var messageFactory = new TelemetryMessageFactory(_deviceConnection.DeviceStateContainer, 0xffffffff);
+        
+        var telemetryPacket = messageFactory.CreateTelemetryPacket();
+        telemetryPacket.WantAck = false;
+        telemetryPacket.Priority = MeshPacket.Types.Priority.Background;
+        telemetryPacket.Decoded.WantResponse = false;
+        telemetryPacket.Decoded.Payload = new Telemetry
+        {
+            Time = (uint)DateTime.UtcNow.ToFrench().ToUnixTimestamp(),
+            EnvironmentMetrics = new EnvironmentMetrics
             {
-                Logger.LogInformation("Sending telemetry message OK");
-                return Task.FromResult(true);
-            });
+                Temperature = EntitiesManagerService.Entities.WeatherTemperature.Value,
+                RelativeHumidity = EntitiesManagerService.Entities.WeatherHumidity.Value,
+                BarometricPressure = EntitiesManagerService.Entities.WeatherPressure.Value,
+                Voltage = EntitiesManagerService.Entities.BatteryVoltage.Value / 1000.0f,
+                Current = EntitiesManagerService.Entities.MpptChargeCurrent.Value
+            },
+            // PowerMetrics = new PowerMetrics
+            // {
+            //     Ch1Current = 130.56f, // EntitiesManagerService.Entities.BatteryCurrent.Value,
+            //     Ch1Voltage = 12.45f, // EntitiesManagerService.Entities.BatteryVoltage.Value / 1000.0f,
+            //     Ch2Current = 1256.89f, // EntitiesManagerService.Entities.SolarCurrent.Value,
+            //     Ch2Voltage = 13, // EntitiesManagerService.Entities.SolarVoltage.Value / 1000.0f,
+            // }
+        }.ToByteString();
+        
+        Logger.LogTrace("Sending telemetry message");
+        
+        Send(telemetryPacket);
     }
 
-    private async Task SetPosition()
+    private void SetPosition()
     {
         if (_deviceConnection == null)
         {
             throw new Exception("No connection");
         }
         
-        var adminMessageFactory = new AdminMessageFactory(await GetContainer());
+        var adminMessageFactory = new AdminMessageFactory(_deviceConnection.DeviceStateContainer);
 
         decimal divisor = new(1e-7);
         var position = new Position
@@ -124,14 +248,34 @@ public class MeshtasticApp : AEnabledWorker
             Altitude = _altitude
         };
 
-        var adminMessage = adminMessageFactory.CreateFixedPositionMessage(position);
+        var adminPaquet = adminMessageFactory.CreateFixedPositionMessage(position);
         Logger.LogInformation("Setting fixed position");
 
-        await _deviceConnection.WriteToRadio(_toRadioMessageFactory.CreateMeshPacketMessage(adminMessage), async (_, _) =>
-            {
-                Logger.LogInformation("Setting fixed position OK");
-                await Task.Delay(2000);
-                return true;
-            });
+        Send(adminPaquet);
+    }
+
+    private void Send(MeshPacket packet)
+    {
+        if (_deviceConnection == null)
+        {
+            throw new Exception("No connection");
+        }
+
+        var payload = packet.Decoded.Payload.ToStringUtf8();
+        Logger.LogInformation("Sending {message} to {to} on channel {channel}", payload, packet.Channel, _deviceConnection.DeviceStateContainer.GetNodeDisplayName(packet.To));
+        
+        _deviceConnection.Send(_deviceConnection.ToRadioFactory.CreateMeshPacketMessage(packet));
+        
+        _context.Add(new LoRa
+        {
+            Frame = JsonSerializer.Serialize(new {
+                Payload = payload,
+                Raw = packet,
+            }),
+            Sender = _deviceConnection.DeviceStateContainer.GetNodeDisplayName(_deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum),
+            IsTx = true,
+            IsMeshtastic = true
+        });
+        _context.SaveChanges();
     }
 }

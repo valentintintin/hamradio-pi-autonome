@@ -45,7 +45,7 @@
       <PackageReference Include="AntDesign.Charts" Version="0.5.1" />
       <PackageReference Include="AprsSharp.AprsIsClient" Version="0.3.1" />
       <PackageReference Include="JoySoftware.NetDaemon.Extensions.Scheduling" Version="23.44.1" />
-      <PackageReference Include="Meshtastic" Version="1.0.39" />
+      <PackageReference Include="Meshtastic" Version="1.0.0" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
         <PrivateAssets>all</PrivateAssets>
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

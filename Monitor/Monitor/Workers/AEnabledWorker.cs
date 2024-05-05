@@ -22,18 +22,27 @@ public abstract class AEnabledWorker : AWorker
             {
                 try
                 {
-                    await DoState(state);
+                    await DoState(state, cancellationToken);
                 }
                 catch (Exception e)
                 {
-                    Logger.LogCritical(e, "Crash of retry in {duration}", RetryDuration);
+                    try
+                    {
+                        await Stop();
+                    }
+                    catch (Exception ee)
+                    {
+                        Logger.LogWarning(ee, "Crash during stop of worker after crash");
+                    }
+                    
+                    Logger.LogCritical(e, "Crash of worker, retry in {duration}", RetryDuration);
                 }
             });
 
         return Task.CompletedTask;
     }
 
-    private async Task DoState(bool state)
+    private async Task DoState(bool state, CancellationToken cancellationToken)
     {
         if (state)
         {
@@ -44,10 +53,10 @@ public abstract class AEnabledWorker : AWorker
 
             Logger.LogInformation("Starting {worker}", Enabled.Id);
 
-            await Start();
+            await Start(cancellationToken);
             Started = true;
 
-            Logger.LogInformation("Started {worker}", Enabled.Id);
+            Logger.LogInformation("{worker} started !", Enabled.Id);
         }
         else
         {
@@ -60,7 +69,7 @@ public abstract class AEnabledWorker : AWorker
 
             await Stop();
 
-            Logger.LogInformation("Stopped {worker}", Enabled.Id);
+            Logger.LogInformation("{worker} stopped !", Enabled.Id);
         }
     }
 }
