@@ -11,8 +11,6 @@ public class LoraData : Message
     [JsonPropertyName("payload")]
     public required string Payload { get; set; }
 
-    public string Sender => Payload[..Payload.IndexOf('>')]; 
-
     [JsonIgnore]
     public bool IsTx => State == "tx";
 }

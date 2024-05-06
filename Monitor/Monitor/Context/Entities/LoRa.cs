@@ -16,4 +16,6 @@ public class LoRa : IEntity
     public required bool IsTx { get; set; }
     
     public required bool IsMeshtastic { get; set; }
+
+    public string TypeString => IsMeshtastic ? "Meshtastic" : "APRS";
 }

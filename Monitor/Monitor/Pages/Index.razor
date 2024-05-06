@@ -1,14 +1,14 @@
 ﻿@page "/"
 
-@using Monitor.Extensions
-@using Monitor.Services
-@using Message = Monitor.Models.SerialMessages.Message
+
 @using System.Globalization
 @using Microsoft.EntityFrameworkCore
 @using Monitor.Context
-@using Monitor.Models.SerialMessages
-
+@using Monitor.Extensions
+@using Monitor.Models
+@using Monitor.Services
 @implements IDisposable
+
 @inject IDbContextFactory<DataContext> DbContextFactory
 
 <PageTitle>Tableau de bord</PageTitle>
@@ -147,8 +147,8 @@
                 @foreach (var message in _loraLastHeards)
                 {
                     <TimelineItem>
-                        <strong>@message.Type - @message.Sender - @message.ReceivedAt.ToFrench().ToString(CultureInfo.CurrentCulture)</strong>
-                        <pre>@message.Payload</pre>
+                        <strong>@message.Type - @message.Sender - @message.CreatedAt.ToFrench().ToString(CultureInfo.CurrentCulture)</strong>
+                        <pre>@message.Frame</pre>
                     </TimelineItem>
                 }
             </Timeline>
@@ -164,8 +164,8 @@
                 @foreach (var message in _loras)
                 {
                     <TimelineItem  Color="@(message.IsTx ? "red" : "green")">
-                        <strong>@message.Type - @message.ReceivedAt.ToFrench().ToString(CultureInfo.CurrentCulture) - @(message.IsTx ? "TX" : "RX")</strong>
-                        <pre>@message.Payload</pre>
+                        <strong>@message.Type - @message.CreatedAt.ToFrench().ToString(CultureInfo.CurrentCulture) - @(message.IsTx ? "TX" : "RX")</strong>
+                        <pre>@message.Frame</pre>
                     </TimelineItem>
                 }
             </Timeline>
@@ -206,26 +206,15 @@
         _loras = await context.LoRas
             .OrderByDescending(l => l.Id)
             .Take(10)
-            .Select(l => new LoraData
-            {
-                Type = l.IsMeshtastic ? "Meshtastic" : "APRS", 
-                State = l.IsTx ? "tx" : "rx",
-                Payload = l.Frame,
-                ReceivedAt = l.CreatedAt
-            }).ToListAsync();
+            .Select(l => new LoRaMessage(l))
+            .ToListAsync();
         _loraLastHeards = context.LoRas
             .Where(e => !e.IsTx && e.Sender != null)
             .AsEnumerable()
             .GroupBy(e => e.Sender, 
                 (sender, frames) => frames.OrderByDescending(l => l.Id).First())
-            .Select(l => new LoraData
-            {
-                Type = l.IsMeshtastic ? "Meshtastic" : "APRS", 
-                State = "rx",
-                Payload = l.Frame,
-                ReceivedAt = l.CreatedAt
-            })
-            .OrderByDescending(l => l.ReceivedAt)
+            .OrderByDescending(l => l.CreatedAt)
+            .Select(l => new LoRaMessage(l))
             .ToList();
         
         await InvokeAsync(StateHasChanged);
@@ -236,7 +225,7 @@
         _timer?.Dispose();
     }
 
-    private List<LoraData> _loras = []; // If we use LoRa Entity class, We have error CS1503
-    private List<LoraData> _loraLastHeards = [];
+    private List<LoRaMessage> _loras = []; // If we use LoRa Entity class, We have error CS1503
+    private List<LoRaMessage> _loraLastHeards = [];
     private Timer? _timer;
 }

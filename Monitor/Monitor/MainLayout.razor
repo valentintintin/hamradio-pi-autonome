@@ -2,6 +2,7 @@
 @using Monitor.Extensions
 @using Monitor.Services
 @using System.Reactive.Linq
+@using Monitor.Models
 @inherits Microsoft.AspNetCore.Components.LayoutComponentBase
 @inject NavigationManager NavManager
 @inject INotificationService NotificationService
@@ -59,7 +60,15 @@
             .Merge(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.WatchdogEnabled.ValueChanges())
             .SubscribeAsync(Notify);
-
+        
+        EntitiesManagerService.Entities.LoraAprsRxPayload.ValueChanges()
+            .Merge(EntitiesManagerService.Entities.LoraAprsTxPayload.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.LoraMeshtasticRxPayload.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.LoraMeshtasticTxPayload.ValueChanges())
+            .Where(l => l.value != null)
+            .Select(l => l.value!)
+            .SubscribeAsync(NotifyLoRa);
+        
         EntitiesManagerService.Entities.McuStatus.ValueChanges()
             .Merge(EntitiesManagerService.Entities.MpptStatus.ValueChanges())
             .SubscribeAsync(Notify);
@@ -77,6 +86,16 @@
             Key = val.id,
             Message = $"Changement d'état pour {val.id.ToUpper().Replace("/", " ")}",
             Description = $"Passage de {(val.old != null ? val.old : "-")} à {val.value}."
+        });
+    }
+
+    private async Task NotifyLoRa(LoRaMessage message)
+    {
+        await NotificationService.Info(new NotificationConfig
+        {
+            Key = message.Sender,
+            Message = $"{(message.IsTx ? "TX" : "RX")} {message.Type} de {message.Sender}",
+            Description = message.Frame
         });
     }
 }

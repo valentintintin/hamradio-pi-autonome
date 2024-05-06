@@ -185,9 +185,14 @@ public record MqttEntities
     public ConfigEntity<TimeSpan> WatchdogCounter { get; } = new("watchdog/counter");
     public ConfigEntity<TimeSpan> WatchdogPowerOffTime { get; } = new("watchdog/power_off_time", false, default, true);
 
-    public ConfigEntity<string> LoraTxPayload { get; } = new("lora/tx_payload", false, default, true);
+    public ConfigEntity<LoRaMessage> LoraAprsTxPayload { get; } = new("lora/aprs/tx_payload", false, default, true);
 
-    public ConfigEntity<string> LoraRxPayload { get; } = new("lora/rx_payload", false, default, true);
+    public ConfigEntity<LoRaMessage> LoraAprsRxPayload { get; } = new("lora/aprs/rx_payload", false, default, true);
+    
+    public ConfigEntity<LoRaMessage> LoraMeshtasticTxPayload { get; } = new("lora/meshtastic/tx_payload", false, default, true);
+
+    public ConfigEntity<LoRaMessage> LoraMeshtasticRxPayload { get; } = new("lora/meshtastic/rx_payload", false, default, true);
+    public ConfigEntity<List<MeshtasticNode>> LoraMeshtasticNodesOnlines { get; } = new("lora/meshtastic/nodes_onlines", false, default, true);
     
     public ConfigEntity<TimeSpan> SystemUptime { get; } = new("system/uptime", false, default, true);
     public ConfigEntity<int> SystemCpu { get; } = new("system/cpu");

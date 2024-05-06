@@ -25,7 +25,7 @@ public class MonitorState
         Type = "mppt"
     };
 
-    public LoraState Lora { get; } = new();
+    public LoRaStates LoRa { get; set; } = new();
 
     public SystemState? System { get; set; }
     

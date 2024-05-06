@@ -1,4 +1,7 @@
-using AprsSharp.AprsParser;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Meshtastic.Protobufs;
 using Microsoft.EntityFrameworkCore;
 using Monitor.Context;
 using Monitor.Context.Entities;
@@ -15,6 +18,13 @@ public class MonitorService(
     : AService(logger)
 {
     public static readonly MonitorState State = new();
+    
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     public async Task UpdateStateFromMessage(Message message)
     {
@@ -117,20 +127,7 @@ public class MonitorService(
                 await context.SaveChangesAsync();
                 break;
             case LoraData loraData:
-                Logger.LogDebug("New LoRa data received : {message}", loraData);
-                
-                if (loraData.IsTx)
-                {
-                    State.Lora.LastTx.Add(loraData);
-                
-                    EntitiesManagerService.Entities.LoraTxPayload.SetValue(loraData.Payload, true);
-                }
-                else
-                {
-                    State.Lora.LastRx.Add(loraData);
-                
-                    EntitiesManagerService.Entities.LoraRxPayload.SetValue(loraData.Payload, true);
-                }
+                Logger.LogDebug("New LoRa APRS data received : {message}", loraData);
 
                 string? sender = null;
                 
@@ -144,16 +141,69 @@ public class MonitorService(
                     Logger.LogWarning(e, "LoRa APRS frame received not decodable : {payload}", loraData.Payload);
                 }
 
-                context.Add(new LoRa
+                var l = new LoRa
                 {
                     Sender = sender,
                     Frame = loraData.Payload,
                     IsTx = loraData.IsTx,
                     IsMeshtastic = false
-                });
+                };
+                context.Add(l);
                 await context.SaveChangesAsync();
+
+                var loRaMessage = new LoRaMessage(l);
+                
+                if (loraData.IsTx)
+                {
+                    EntitiesManagerService.Entities.LoraAprsTxPayload.SetValue(loRaMessage, true);
+                    State.LoRa.AprsTx.Add(loRaMessage);
+                }
+                else
+                {
+                    EntitiesManagerService.Entities.LoraAprsRxPayload.SetValue(loRaMessage, true);
+                    State.LoRa.AprsRx.Add(loRaMessage);
+                }
+                
                 break;
         }
+    }
+
+    public void AddLoRaMeshtasticMessage(MeshPacket packet, string sender, bool isTx)
+    {
+        var context = contextFactory.CreateDbContext();
+
+        var json = JsonSerializer.Serialize(new {
+            Payload = packet.Decoded.Portnum == PortNum.TextMessageApp ? packet.Decoded.Payload.ToStringUtf8() : packet.Decoded.Portnum.ToString(),
+            Raw = packet,
+        }, _jsonOptions);
+
+        var l = new LoRa
+        {
+            Frame = json,
+            Sender = sender,
+            IsTx = isTx,
+            IsMeshtastic = true
+        };
+        context.Add(l);
+        context.SaveChanges();
+
+        var loRaMessage = new LoRaMessage(l);
+        if (isTx)
+        {
+            EntitiesManagerService.Entities.LoraMeshtasticTxPayload.SetValue(loRaMessage, true);
+            State.LoRa.MeshtasticTx.Add(loRaMessage);
+        }
+        else
+        {
+            EntitiesManagerService.Entities.LoraMeshtasticRxPayload.SetValue(loRaMessage, true); 
+            State.LoRa.MeshtasticRx.Add(loRaMessage);
+        }
+    }
+
+    public void UpdateMeshtasticNodesOnlines(List<MeshtasticNode> nodes)
+    {
+        EntitiesManagerService.Entities.LoraMeshtasticNodesOnlines.SetValue(nodes, true);
+        State.LoRa.MeshtasticNodes = nodes;
     }
 
     public void UpdateSystemState(SystemState? systemState)

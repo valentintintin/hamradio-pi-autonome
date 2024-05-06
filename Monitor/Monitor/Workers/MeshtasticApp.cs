@@ -1,14 +1,10 @@
 using System.Reactive.Concurrency;
-using System.Text.Json;
 using Google.Protobuf;
 using Meshtastic.Connections;
-using Meshtastic.Data;
 using Meshtastic.Data.MessageFactories;
 using Meshtastic.Protobufs;
-using Microsoft.EntityFrameworkCore;
-using Monitor.Context;
-using Monitor.Context.Entities;
 using Monitor.Extensions;
+using Monitor.Models;
 using Monitor.Services;
 using Exception = System.Exception;
 
@@ -17,7 +13,7 @@ namespace Monitor.Workers;
 public class MeshtasticApp : AEnabledWorker
 {
     private readonly SerialMessageService _serialMessageService;
-    private readonly DataContext _context;
+    private readonly MonitorService _monitorService;
     private readonly string _path;
     private readonly int _speed;
     private readonly double _latitude, _longitude;
@@ -28,11 +24,10 @@ public class MeshtasticApp : AEnabledWorker
     private SerialConnection? _deviceConnection;
 
     public MeshtasticApp(ILogger<MeshtasticApp> logger, IServiceProvider serviceProvider,
-        IConfiguration configuration, IDbContextFactory<DataContext> contextFactory,
-        SerialMessageService serialMessageService) : base(logger, serviceProvider)
+        IConfiguration configuration, SerialMessageService serialMessageService, MonitorService monitorService) : base(logger, serviceProvider)
     {
         _serialMessageService = serialMessageService;
-        _context = contextFactory.CreateDbContext();
+        _monitorService = monitorService;
         
         RetryDuration = TimeSpan.FromSeconds(30);
             
@@ -52,7 +47,7 @@ public class MeshtasticApp : AEnabledWorker
     }
 
     protected override async Task Start(CancellationToken cancellationToken)
-    {
+    {   
         _deviceConnection = new SerialConnection(Logger, _path, _speed);
         await _deviceConnection.Start();
 
@@ -61,12 +56,13 @@ public class MeshtasticApp : AEnabledWorker
         );
         
         AddDisposable(
-            Scheduler.SchedulePeriodic(TimeSpan.FromDays(1), SetPosition)
+            Scheduler.SchedulePeriodic(TimeSpan.FromHours(1), SetPosition)
         );
+        
+        // Wait for RTC Mcu time sended to give it to Meshtastic device
+        AddDisposable(Scheduler.Schedule(TimeSpan.FromMinutes(2), SetPosition));
 
         _deviceConnection.MessageRecieved += PacketReceived;
-
-        // await SetPosition();
     }
 
     protected override Task Stop()
@@ -90,31 +86,39 @@ public class MeshtasticApp : AEnabledWorker
             throw new Exception("No connection");
         }
 
-        if (e.Message.Packet == null)
+        var nodes = e.DeviceStateContainer.Nodes
+            .Skip(1) // it's us
+            .Select(n => new MeshtasticNode(n))
+            .ToList();
+        
+        _monitorService.UpdateMeshtasticNodesOnlines(nodes);
+
+        var packet = e.Message.Packet;
+        if (packet == null)
         {
             return;
         }
         
-        _context.Add(new LoRa
+        var payload = packet.Decoded.Portnum.ToString();
+        if (packet.Decoded.Portnum == PortNum.TextMessageApp)
         {
-            Frame = JsonSerializer.Serialize(new {
-                Payload = e.Message.Packet.Decoded.Payload.ToStringUtf8(),
-                Raw = e.Message,
-            }),
-            Sender = e.DeviceStateContainer.GetNodeDisplayName(e.Message.Packet.From),
-            IsTx = false,
-            IsMeshtastic = true
-        });
-        _context.SaveChanges();
+            payload = packet.Decoded.Payload.ToStringUtf8();
+        }
+        Logger.LogInformation("Receiving {message} on channel {channel} from {from} to {to}", payload, packet.Channel, _deviceConnection.DeviceStateContainer.GetNodeDisplayName(packet.From), _deviceConnection.DeviceStateContainer.GetNodeDisplayName(packet.To));
         
-        DoEcho(e.Message);
+        _monitorService.AddLoRaMeshtasticMessage(packet, e.DeviceStateContainer.GetNodeDisplayName(packet.From), false);
+
+        if (!DoEcho(e.Message))
+        {
+            DoCommand(e.Message);
+        }
     }
 
-    private void DoEcho(FromRadio radio)
+    private bool DoEcho(FromRadio radio)
     {
         if (!_echoEnabled)
         {
-            return;
+            return false;
         }
         
         if (_deviceConnection == null)
@@ -127,16 +131,16 @@ public class MeshtasticApp : AEnabledWorker
 
         if (packet.From == _deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum || packet.Channel != _channelEcho || packetDecoded is not { Portnum: PortNum.TextMessageApp })
         {
-            return;
+            return false;
         }
         
         var payloadString = packetDecoded.Payload.ToStringUtf8();
 
         if (!payloadString.StartsWith('?'))
         {
-            return;
+            return false;
         }
-                
+        
         var textMessageFactory = new TextMessageFactory(_deviceConnection.DeviceStateContainer);
         var textMessagePacket = textMessageFactory.CreateTextMessagePacket($">{payloadString}");
         textMessagePacket.To = packet.From;
@@ -145,9 +149,11 @@ public class MeshtasticApp : AEnabledWorker
         Logger.LogTrace("Sending echo message {message}", payloadString);
 
         Send(textMessagePacket);
+
+        return true;
     }
 
-    private void DoCommand(FromRadio radio)
+    private bool DoCommand(FromRadio radio)
     {
         if (_deviceConnection == null)
         {
@@ -159,14 +165,14 @@ public class MeshtasticApp : AEnabledWorker
 
         if (packet.To != _deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum || packetDecoded is not { Portnum: PortNum.TextMessageApp })
         {
-            return;
+            return false;
         }
         
         var payloadString = packetDecoded.Payload.ToStringUtf8();
 
         if (!payloadString.StartsWith('!'))
         {
-            return;
+            return false;
         }
 
         if (_serialMessageService.SendCommand(payloadString.TrimStart('!')))
@@ -186,6 +192,8 @@ public class MeshtasticApp : AEnabledWorker
         Logger.LogTrace("Sending ack command for {command}", payloadString);
 
         Send(textMessagePacket);
+
+        return true;
     }
 
     private void SendWeather()
@@ -238,20 +246,24 @@ public class MeshtasticApp : AEnabledWorker
             throw new Exception("No connection");
         }
         
-        var adminMessageFactory = new AdminMessageFactory(_deviceConnection.DeviceStateContainer);
+        var positionMessageFactory = new PositionMessageFactory(_deviceConnection.DeviceStateContainer);
 
         decimal divisor = new(1e-7);
         var position = new Position
         {
             LatitudeI = decimal.ToInt32((decimal)(_latitude / (double)divisor)),
             LongitudeI = decimal.ToInt32((decimal)(_longitude / (double)divisor)),
-            Altitude = _altitude
+            Altitude = _altitude,
+            Time = (uint)DateTime.UtcNow.ToFrench().ToUnixTimestamp()
         };
 
-        var adminPaquet = adminMessageFactory.CreateFixedPositionMessage(position);
-        Logger.LogInformation("Setting fixed position");
+        var positionPacket = positionMessageFactory.CreatePositionPacket(position);
+        positionPacket.WantAck = false;
+        positionPacket.Priority = MeshPacket.Types.Priority.Background;
+        
+        Logger.LogInformation("Setting position and time");
 
-        Send(adminPaquet);
+        Send(positionPacket);
     }
 
     private void Send(MeshPacket packet)
@@ -261,21 +273,15 @@ public class MeshtasticApp : AEnabledWorker
             throw new Exception("No connection");
         }
 
-        var payload = packet.Decoded.Payload.ToStringUtf8();
-        Logger.LogInformation("Sending {message} to {to} on channel {channel}", payload, packet.Channel, _deviceConnection.DeviceStateContainer.GetNodeDisplayName(packet.To));
+        var payload = packet.Decoded.Portnum.ToString();
+        if (packet.Decoded.Portnum == PortNum.TextMessageApp)
+        {
+            payload = packet.Decoded.Payload.ToStringUtf8();
+        }
+        Logger.LogInformation("Sending {message} on channel {channel} to {to}", payload, packet.Channel, _deviceConnection.DeviceStateContainer.GetNodeDisplayName(packet.To));
         
         _deviceConnection.Send(_deviceConnection.ToRadioFactory.CreateMeshPacketMessage(packet));
         
-        _context.Add(new LoRa
-        {
-            Frame = JsonSerializer.Serialize(new {
-                Payload = payload,
-                Raw = packet,
-            }),
-            Sender = _deviceConnection.DeviceStateContainer.GetNodeDisplayName(_deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum),
-            IsTx = true,
-            IsMeshtastic = true
-        });
-        _context.SaveChanges();
+        _monitorService.AddLoRaMeshtasticMessage(packet, _deviceConnection.DeviceStateContainer.GetNodeDisplayName(_deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum), true);
     }
 }

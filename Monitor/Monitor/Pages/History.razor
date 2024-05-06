@@ -45,9 +45,12 @@
         </GridCol>
         
         <GridCol Xs="24" Md="12">
-            <Stat Title="LoRa RX" ShowMin="false" Data="@_loraRx" />
+            <Stat Title="LoRa APRS RX" ShowMin="false" Data="@_loraAprsRx" />
         </GridCol>
         <GridCol Xs="24" Md="12">
+            <Stat Title="LoRa Meshtastic RX" ShowMin="false" Data="@_loraMeshtasticRx" />
+        </GridCol>
+        <GridCol Xs="24">
             <Stat Title="Uptime" ShowMin="false" Data="@_uptime" Type="@typeof(TimeSpan)" />
         </GridCol>
         
@@ -68,7 +71,8 @@
     private readonly StatsView _voltageBattery = new();
     private readonly StatsView _currentBattery = new();
     private readonly StatsView _currentSolar = new();
-    private readonly StatsView _loraRx = new();
+    private readonly StatsView _loraAprsRx = new();
+    private readonly StatsView _loraMeshtasticRx = new();
     private readonly StatsView _temperature = new();
     private readonly StatsView _humidity = new();
     private readonly StatsView _pressure = new();
@@ -118,7 +122,17 @@
             Value = d.SolarCurrent
         }));
 
-        _loraRx.FromData(context.LoRas.Select(d => new StatsView.UnitData
+        _loraAprsRx.FromData(context.LoRas.Where(l => !l.IsMeshtastic).Select(d => new StatsView.UnitData
+        {
+            DateTime = d.CreatedAt,
+            Value = d.IsTx ? 0 : 1
+        }).GroupBy(d => d.DateTime.Date, (time, data) => new StatsView.UnitData
+        {
+            DateTime = time,
+            Value = data.Sum(d => d.Value)
+        }));
+        
+        _loraMeshtasticRx.FromData(context.LoRas.Where(l => l.IsMeshtastic).Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.IsTx ? 0 : 1
