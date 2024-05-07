@@ -20,6 +20,8 @@ public class MeshtasticApp : AEnabledWorker
     private readonly int _altitude;
     private readonly bool _telemEnabled, _echoEnabled;
     private readonly uint _channelEcho;
+    private readonly int _currentYear;
+    private readonly TimeSpan _intervalTelemetry;
     
     private SerialConnection? _deviceConnection;
 
@@ -30,12 +32,15 @@ public class MeshtasticApp : AEnabledWorker
         _monitorService = monitorService;
         
         RetryDuration = TimeSpan.FromSeconds(30);
-            
+
+        _currentYear = configuration.GetValueOrThrow<int>("CurrentYear");
+        
         var configurationSection = configuration.GetSection("Meshtastic");
         _path = configurationSection.GetValueOrThrow<string>("Path");
         _speed = configurationSection.GetValue("Speed", 38400);
         
         _telemEnabled = configurationSection.GetValue("TelemetryEnabled", false);
+        _intervalTelemetry = TimeSpan.FromMinutes(configurationSection.GetValue("PositionAndTelemetryInterval", 15));
         
         _echoEnabled = configurationSection.GetValue("EchoEnabled", false);
         _channelEcho = (uint)configurationSection.GetValue("ChannelEcho", 0);
@@ -52,15 +57,12 @@ public class MeshtasticApp : AEnabledWorker
         await _deviceConnection.Start();
 
         AddDisposable(
-            Scheduler.SchedulePeriodic(TimeSpan.FromMinutes(15), SendWeather)
+            Scheduler.SchedulePeriodic(_intervalTelemetry, SendWeather)
         );
         
         AddDisposable(
-            Scheduler.SchedulePeriodic(TimeSpan.FromHours(1), SetPosition)
+            Scheduler.SchedulePeriodic(_intervalTelemetry, SetPosition)
         );
-        
-        // Wait for RTC Mcu time sended to give it to Meshtastic device
-        AddDisposable(Scheduler.Schedule(TimeSpan.FromMinutes(2), SetPosition));
 
         _deviceConnection.MessageRecieved += PacketReceived;
     }
@@ -92,6 +94,11 @@ public class MeshtasticApp : AEnabledWorker
             .ToList();
         
         _monitorService.UpdateMeshtasticNodesOnlines(nodes);
+
+        if (DateTime.UtcNow.Year == _currentYear && nodes.Any(n => n.LastHeardFromNow == TimeSpan.Zero))
+        {
+            SetPosition();
+        }
 
         var packet = e.Message.Packet;
         if (packet == null)

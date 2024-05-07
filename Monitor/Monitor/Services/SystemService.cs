@@ -1,11 +1,13 @@
 using System.Diagnostics;
+using Monitor.Extensions;
 
 namespace Monitor.Services;
 
-public class SystemService(ILogger<SystemService> logger, SerialMessageService serialMessageService)
+public class SystemService(ILogger<SystemService> logger, SerialMessageService serialMessageService, IConfiguration configuration)
     : AService(logger)
 {
     private TimeSpan? WillSleep { get; set; }
+    private readonly int _currentYear = configuration.GetValueOrThrow<int>("CurrentYear");
 
     public void AskForShutdown(TimeSpan sleepTime)
     {
@@ -39,7 +41,7 @@ public class SystemService(ILogger<SystemService> logger, SerialMessageService s
             return;
         }
         
-        if (dateTime.Year != 2024)
+        if (dateTime.Year != _currentYear)
         {
             Logger.LogWarning("Change dateTime impossible because incoherent {dateTime}", dateTime);
             return;
