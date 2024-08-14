@@ -10,6 +10,9 @@ public class GpioData : Message
     [JsonPropertyName("npr")]
     public bool Npr { get; set; }
     
+    [JsonPropertyName("msh")]
+    public bool Meshtastic { get; set; }
+    
     [JsonPropertyName("ldr")]
     public int Ldr { get; set; }
 }

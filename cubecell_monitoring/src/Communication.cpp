@@ -50,15 +50,17 @@ Communication::Communication(System *system) : system(system) {
     strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[0].name, PSTR("Night"));
     strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[1].name, PSTR("Alrt"));
     strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[2].name, PSTR("WDog"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[3].name, PSTR("NPR"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[4].name, PSTR("5V"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[5].name, PSTR("Box"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[3].name, PSTR("5V"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[4].name, PSTR("Box"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[5].name, PSTR("Wif"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[6].name, PSTR("NPR"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[7].name, PSTR("Msh"));
 }
 
 bool Communication::begin(RadioEvents_t *radioEvents) {
     if (Radio.Init(radioEvents)) {
-        system->serialError(PSTR("[RADIO] Init error"));
         system->displayText(PSTR("LoRa error"), PSTR("Init failed"));
+        system->serialError(PSTR("[RADIO] Init error"));
 
         return false;
     }
@@ -73,7 +75,7 @@ bool Communication::begin(RadioEvents_t *radioEvents) {
     Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                       LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                       LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
-                      true, false, 0, LORA_IQ_INVERSION_ON, 3000);
+                      true, false, 0, LORA_IQ_INVERSION_ON, 5000);
 
     Radio.Rx(0);
 
@@ -104,20 +106,21 @@ void Communication::send() {
 
     system->turnOnRGB(COLOR_YELLOW);
 
-    while (USE_RF && !(Radio.GetStatus() == RF_RX_RUNNING || Radio.GetStatus() == RF_IDLE)) {
-        Log.warningln(F("[LORA_TX] Locked. Radio Status : %d"), Radio.GetStatus());
+    uint8_t rxTry = 0;
+    while (rxTry++ < 5 && USE_RF && !(Radio.GetStatus() == RF_RX_RUNNING || Radio.GetStatus() == RF_IDLE)) {
+        Log.warningln(F("[LORA_TX] Locked. Radio Status : %d. Try : %d"), Radio.GetStatus(), rxTry);
         delay(2500);
         Radio.IrqProcess();
     }
 
-    Log.traceln(F("[LORA_TX] Radio ready, status : %d"), Radio.GetStatus());
+    Log.traceln(F("[LORA_TX] Radio ready, status : %d. Try : %d"), Radio.GetStatus(), rxTry - 1);
 
     system->turnOnRGB(COLOR_RED);
 
     uint8_t size = Aprs::encode(&aprsPacketTx, bufferText);
 
     if (!size) {
-        system->serialError(PSTR("[APRS] Error during string encode"));
+        system->serialError(PSTR("[APRS] Error during string encode"), false);
         system->displayText("LoRa send error", "APRS encode error");
     } else {
         buffer[0] = '<';
@@ -183,13 +186,15 @@ void Communication::sendTelemetry() {
     aprsPacketTx.telemetries.telemetriesAnalog[1].value = system->mpptMonitor.getCurrentBattery();
     aprsPacketTx.telemetries.telemetriesAnalog[2].value = system->mpptMonitor.getVoltageSolar();
     aprsPacketTx.telemetries.telemetriesAnalog[3].value = system->mpptMonitor.getCurrentSolar();
-    aprsPacketTx.telemetries.telemetriesAnalog[4].value = system->mpptMonitor.isWatchdogEnabled() ? system->mpptMonitor.getWatchdogCounter() : 0;
+    aprsPacketTx.telemetries.telemetriesAnalog[4].value = system->mpptMonitor.isWatchdogEnabled() ? system->mpptMonitor.getWatchdogCounter() : system->mpptMonitor.getWatchdogSafetyTimeLeft() / 1000;
     aprsPacketTx.telemetries.telemetriesBoolean[0].value = system->mpptMonitor.isNight();
     aprsPacketTx.telemetries.telemetriesBoolean[1].value = system->mpptMonitor.isAlert();
     aprsPacketTx.telemetries.telemetriesBoolean[2].value = system->mpptMonitor.isWatchdogEnabled();
-    aprsPacketTx.telemetries.telemetriesBoolean[3].value = system->gpio.isNprEnabled();
-    aprsPacketTx.telemetries.telemetriesBoolean[4].value = system->mpptMonitor.isPowerEnabled();
-    aprsPacketTx.telemetries.telemetriesBoolean[5].value = system->isBoxOpened();
+    aprsPacketTx.telemetries.telemetriesBoolean[3].value = system->mpptMonitor.isPowerEnabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[4].value = system->isBoxOpened();
+    aprsPacketTx.telemetries.telemetriesBoolean[5].value = system->gpio.isWifiEnabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[6].value = system->gpio.isNprEnabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[7].value = system->gpio.isMeshtasticEnabled();
 
     aprsPacketTx.type = Telemetry;
     send();
@@ -224,6 +229,7 @@ void Communication::sendPosition(const char* comment) {
     strcpy(aprsPacketTx.comment, comment);
 
     aprsPacketTx.type = Position;
+    aprsPacketTx.position.withWeather = system->weatherSensors.getPressure() > 0;
 
     aprsPacketTx.weather.temperatureFahrenheit = system->weatherSensors.getTemperature() * 9 / 5 + 32;
     aprsPacketTx.weather.humidity = system->weatherSensors.getHumidity();
@@ -250,12 +256,10 @@ void Communication::sent() {
 
     system->turnOffRGB();
 
-    Log.infoln(F("[LORA_TX] Done"));
+    Log.infoln(F("[LORA_TX] End"));
 }
 
 void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int8_t snr) {
-    Radio.Rx(0);
-
     Log.traceln(F("[LORA_RX] Payload of size %d, RSSI : %d and SNR : %d"), size, rssi, snr);
     Log.infoln(F("[LORA_RX] %s"), payload);
 
@@ -277,7 +281,7 @@ void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int
     bool shouldTx = false;
 
     if (!Aprs::decode(reinterpret_cast<const char *>(payload + sizeof(uint8_t) * 3), &aprsPacketRx)) {
-        system->serialError(PSTR("[APRS] Error during decode"));
+        system->serialError(PSTR("[APRS] Error during decode"), false);
     } else {
         Log.traceln(F("[APRS] Decoded from %s to %s via %s"), aprsPacketRx.source, aprsPacketRx.destination, aprsPacketRx.path);
 
@@ -299,7 +303,7 @@ void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int
             const char *hasCallsign = strstr_P(aprsPacketRx.path, PSTR(APRS_CALLSIGN));
             shouldTx = hasWide != nullptr || hasCallsign != nullptr;
 
-            Log.traceln(F("[APRS] Message should TX : %d. hasWide : %d, hasCallsign : %d"), shouldTx,
+            Log.traceln(F("[APRS] Message should TX : %T. hasWide : %T, hasCallsign : %T"), shouldTx,
                         hasWide != nullptr, hasCallsign != nullptr);
             if (shouldTx) {
                 if (hasCallsign != nullptr && *(hasCallsign + 1) != '*') { // Test if VIA callsign not consumed
@@ -328,5 +332,7 @@ void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int
 
     if (!shouldTx) {
         system->turnOffRGB();
+        Radio.IrqProcess();
+        Radio.Rx(0);
     }
 }

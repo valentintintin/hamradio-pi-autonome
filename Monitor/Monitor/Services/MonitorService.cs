@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Meshtastic.Extensions;
 using Meshtastic.Protobufs;
 using Microsoft.EntityFrameworkCore;
 using Monitor.Context;
@@ -35,24 +36,25 @@ public class MonitorService(
         switch (message)
         {
             case McuSystemData systemData:
-                Logger.LogDebug("New system data received : {message}", systemData);
+                Logger.LogInformation("New system data received : {message}", systemData);
                 
                 State.McuSystem = systemData;
                 
-                EntitiesManagerService.Entities.McuStatus.SetValue(systemData.State, true);
+                EntitiesManagerService.Entities.McuStatus.SetValue($"{systemData.State} {(systemData.NbError > 0 ? $"({systemData.NbError} errors)" : "")}", true);
                 EntitiesManagerService.Entities.StatusBoxOpened.SetValue(systemData.BoxOpened, true);
                 EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.SetValue(systemData.WatchdogSafetyEnabled, true);
                 EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.SetValue(systemData.AprsDigipeaterEnabled, true);
                 EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.SetValue(systemData.AprsTelemetryEnabled, true);
                 EntitiesManagerService.Entities.FeatureAprsPositionEnabled.SetValue(systemData.AprsPositionEnabled, true);
                 EntitiesManagerService.Entities.FeatureSleepEnabled.SetValue(systemData.Sleep, true);
+                EntitiesManagerService.Entities.FeatureResetOnErrorEnabled.SetValue(systemData.ResetError, true);
                 EntitiesManagerService.Entities.TemperatureRtc.SetValue(systemData.TemperatureRtc, true);
                 EntitiesManagerService.Entities.McuUptime.SetValue(systemData.UptimeTimeSpan, true);
                 
                 systemService.SetTime(State.McuSystem.DateTime.DateTime);
                 break;
             case WeatherData weatherData:
-                Logger.LogDebug("New weather data received : {message}", weatherData);
+                Logger.LogInformation("New weather data received : {message}", weatherData);
 
                 State.Weather = weatherData;
                 
@@ -69,7 +71,7 @@ public class MonitorService(
                 await context.SaveChangesAsync();
                 break;
             case MpptData mpptData:
-                Logger.LogDebug("New MPPT data received : {message}", mpptData);
+                Logger.LogInformation("New MPPT data received : {message}", mpptData);
 
                 State.Mppt = mpptData;
                 
@@ -107,27 +109,30 @@ public class MonitorService(
                 await context.SaveChangesAsync();
                 break;
             case GpioData gpioData:
-                Logger.LogDebug("New GPIO data received : {message}", gpioData);
+                Logger.LogInformation("New GPIO data received : {message}", gpioData);
 
                 State.Gpio = gpioData;
                 
                 EntitiesManagerService.Entities.GpioWifi.SetValue(gpioData.Wifi, true);
                 EntitiesManagerService.Entities.GpioNpr.SetValue(gpioData.Npr, true);
+                EntitiesManagerService.Entities.GpioMeshtastic.SetValue(gpioData.Meshtastic, true);
                 EntitiesManagerService.Entities.GpioBoxLdr.SetValue(gpioData.Ldr, true);
 
                 context.Add(new Context.Entities.System
                 {
                     Npr = gpioData.Npr,
                     Wifi = gpioData.Wifi,
+                    Meshtastic = gpioData.Meshtastic,
                     Uptime = (long)EntitiesManagerService.Entities.SystemUptime.Value.TotalSeconds,
                     BoxOpened = State.McuSystem.BoxOpened,
                     McuUptime = State.McuSystem.Uptime,
-                    TemperatureRtc = State.McuSystem.TemperatureRtc
+                    TemperatureRtc = State.McuSystem.TemperatureRtc,
+                    NbError = State.McuSystem.NbError
                 });
                 await context.SaveChangesAsync();
                 break;
             case LoraData loraData:
-                Logger.LogDebug("New LoRa APRS data received : {message}", loraData);
+                Logger.LogInformation("New LoRa APRS data received : {message}", loraData);
 
                 string? sender = null;
                 
@@ -168,13 +173,13 @@ public class MonitorService(
         }
     }
 
-    public void AddLoRaMeshtasticMessage(MeshPacket packet, string sender, bool isTx)
-    {
+    public void AddLoRaMeshtasticMessage(MeshPacket packet, string sender, bool isTx) {
         var context = contextFactory.CreateDbContext();
 
         var json = JsonSerializer.Serialize(new {
-            Payload = packet.Decoded.Portnum == PortNum.TextMessageApp ? packet.Decoded.Payload.ToStringUtf8() : packet.Decoded.Portnum.ToString(),
-            Raw = packet,
+            Type = packet.Decoded?.Portnum.ToString(),
+            Payload = packet.GetPayload(),
+            Raw = packet
         }, _jsonOptions);
 
         var l = new LoRa

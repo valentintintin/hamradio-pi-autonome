@@ -40,7 +40,9 @@ public:
     void turnOnRGB(uint32_t color);
     void turnOffRGB();
     void displayText(const char* title, const char* content, uint16_t pause = TIME_PAUSE_SCREEN) const;
-    void serialError(const char* content);
+    void serialError(const char* content, bool addError = true);
+    void addError();
+    void removeOneError();
 
     static DateTime nowToString(char *result);
 
@@ -53,6 +55,7 @@ public:
 
     bool forceSendPosition = false;
     bool forceSendTelemetry = false;
+    uint8_t nbError = 0;
 private:
     bool screenOn = false;
     uint32_t ledColor = 0;
@@ -63,11 +66,12 @@ private:
         EEPROM_ADDRESS_APRS_TELEMETRY
         EEPROM_ADDRESS_APRS_POSITION
         EEPROM_ADDRESS_SLEEP
+        EEPROM_ADDRESS_RESET_ON_ERROR
      */
-    bool functionsAllowed[5] = {true, true, true, true, true};
+    bool functionsAllowed[6] = {false, true, true, true, false, false};
 
-    Timer timerStatus = Timer(INTERVAL_STATUS_APRS, true);
-    Timer timerPosition = Timer(INTERVAL_POSITION_APRS, true);
+    Timer timerStatus = Timer(INTERVAL_STATUS_APRS, false);
+    Timer timerPosition = Timer(INTERVAL_POSITION_AND_WEATHER_APRS, true);
     Timer timerTelemetry = Timer(INTERVAL_TELEMETRY_APRS, false);
     Timer timerState = Timer(INTERVAL_STATE, true);
     Timer timerScreen = Timer(TIME_SCREEN_ON);

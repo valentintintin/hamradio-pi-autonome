@@ -9,13 +9,13 @@ using Monitor.Context;
 using Monitor.Extensions;
 using Monitor.Services;
 
-namespace Monitor.Workers;
+namespace Monitor.Workers.Enableables;
 
 public class AprsIsApp : AEnabledWorker
 {
     private readonly SerialMessageService _serialMessageService;
     private readonly AprsIsClient _aprsIsClient;
-    private readonly string _callsign, _passcode, _server, _filter;
+    private readonly string _callsign, _passcode, _server, _filter, _destination, _path;
     private readonly string? _objectName, _objectComment;
     private readonly DataContext _context;
     private readonly Position? _objectPosition;
@@ -23,22 +23,28 @@ public class AprsIsApp : AEnabledWorker
     private readonly TcpConnection _tcpConnection = new();
 
     public AprsIsApp(ILogger<AprsIsApp> logger, IServiceProvider serviceProvider,
-        IConfiguration configuration, IDbContextFactory<DataContext> contextFactory) : base(logger, serviceProvider)
+        IConfiguration configuration, IDbContextFactory<DataContext> contextFactory) : base(logger, serviceProvider, false)
     {
         _serialMessageService = Services.GetRequiredService<SerialMessageService>();
         _context = contextFactory.CreateDbContext();
-
-        _aprsIsClient = new AprsIsClient(Services.GetRequiredService<ILogger<AprsIsClient>>(), _tcpConnection);
-        _aprsIsClient.ReceivedPacket += ComputeReceivedPacket;
-        // _aprsIsClient.ReceivedTcpMessage += message => Logger.LogTrace(message);
         
         var configurationSection = configuration.GetSection("AprsIs");
+        
+        _aprsIsClient = new AprsIsClient(Services.GetRequiredService<ILogger<AprsIsClient>>(), _tcpConnection);
+        // _aprsIsClient.ReceivedTcpMessage += message => Logger.LogTrace(message);
+        if (configurationSection.GetValueOrThrow<bool>("IsToRf"))
+        {
+            _aprsIsClient.ReceivedPacket += ComputeReceivedPacket;
+        }
+
         var positionSection = configuration.GetSection("Position");
         
         var latitude = positionSection.GetValueOrThrow<double>("Latitude");
         var longitude = positionSection.GetValueOrThrow<double>("Longitude");
         
         _callsign = configurationSection.GetValueOrThrow<string>("Callsign");
+        _destination = configurationSection.GetValueOrThrow<string>("Destination");
+        _path = configurationSection.GetValueOrThrow<string>("Path");
         _passcode = configurationSection.GetValueOrThrow<string>("Passcode");
         _server = configurationSection.GetValueOrThrow<string>("Server");
         _filter = $"r/{latitude.ToString( CultureInfo.InvariantCulture)}/{longitude.ToString(CultureInfo.InvariantCulture)}/{configurationSection.GetValueOrThrow<int>("RadiusKm")} -e/{_callsign} {configurationSection.GetValueOrThrow<string>("Filter")}\n";
@@ -101,7 +107,7 @@ public class AprsIsApp : AEnabledWorker
 
     private void ComputeReceivedPacket(Packet packet)
     {
-        Logger.LogDebug("Received APRS-IS Packet from {from} to {to} of type {type}", packet.Sender, packet.Destination, packet.InfoField.Type);
+        Logger.LogTrace("Received APRS-IS Packet from {from} to {to} of type {type}", packet.Sender, packet.Path.JoinString(), packet.InfoField.Type);
 
         if (packet.Sender == _callsign)
         {
@@ -113,22 +119,20 @@ public class AprsIsApp : AEnabledWorker
         if (packet.Path.Contains("?") || packet.Path.Contains("qAX") || packet.Path.Contains("RFONLY") ||
             packet.Path.Contains("NOGATE") || packet.Path.Contains("TCPXX"))
         {
-            Logger.LogDebug("Packet from {from} to {to} has not the correct path {path} for RF", packet.Sender, packet.Destination, packet.Path);
+            Logger.LogDebug("Packet from {from} to {to} has not the correct path {path} for RF", packet.Sender, packet.Path.JoinString(), packet.Path);
             
             return;
         }
 
         if (!HasStationHeard())
         {
-            Logger.LogInformation("No station heard since {duration}. So no TX", _durationHeard);
+            Logger.LogDebug("No station heard since {duration}. So no TX", _durationHeard);
             return;
         }
 
         try
         {
-            Packet packetToSend = new(packet.Sender, new List<string> { "TCPIP", _callsign }, packet.InfoField);
-            var packetToSendTnc2 = packetToSend.EncodeTnc2();
-
+            var packetToSendTnc2 = $"{_callsign}>{_destination},{_path}:}}{packet.Sender}>{packet.Path.First()},TCPIP,{_callsign}*:{packet.InfoField.Encode()}";
             Logger.LogInformation("Packet ready to be send to RF: {packet}", packetToSendTnc2);
 
             _serialMessageService.SendLora(packetToSendTnc2);
@@ -161,7 +165,7 @@ public class AprsIsApp : AEnabledWorker
             return false;
         }
 
-        var comment = alive ? $"{_objectComment} Up:{EntitiesManagerService.Entities.SystemUptime.Value}" : "Éteint";
+        var comment = alive ? $"{_objectComment} Up:{EntitiesManagerService.Entities.SystemUptime.Value}" : "Eteint";
         var packet = $"{_callsign}>TCPIP:){_objectName}{(alive ? '!' : '_')}{_objectPosition!.Encode()}{comment}";
         
         Logger.LogInformation("Send packet beacon object alive ? {alive} : {packet}", alive, packet);

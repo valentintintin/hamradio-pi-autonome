@@ -9,7 +9,7 @@
 
 <Layout Class="layout">
     <Header Style="height: auto; min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; color: white;">
-        <span style="margin-right: 60px">Station F4HVV</span>
+        <span style="margin-right: 60px">Station autonome F4HVV</span>
         <Menu Theme="MenuTheme.Dark" Mode="MenuMode.Horizontal">
             <MenuItem RouterLink="/" RouterMatch="NavLinkMatch.All">Tableau de bord</MenuItem>
             <MenuItem RouterLink="/history" RouterMatch="NavLinkMatch.All">Historique</MenuItem>
@@ -50,11 +50,12 @@
 
         EntitiesManagerService.Entities.GpioWifi.ValueChanges()
             .Merge(EntitiesManagerService.Entities.GpioNpr.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.GpioMeshtastic.ValueChanges())
             .Merge(EntitiesManagerService.Entities.StatusBoxOpened.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureSleepEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.MpptPowerEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.ValueChanges())
-            .Merge(EntitiesManagerService.Entities.FeatureSleepEnabled.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.FeatureResetOnErrorEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureAprsPositionEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueChanges())

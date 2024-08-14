@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Monitor.Context;
 
@@ -10,47 +11,14 @@ using Monitor.Context;
 namespace Monitor.Migrations
 {
     [DbContext(typeof(DataContext))]
-    partial class DataContextModelSnapshot : ModelSnapshot
+    [Migration("20240715134022_NbError")]
+    partial class NbError
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.7");
-
-            modelBuilder.Entity("Monitor.Context.Entities.BbsMessage", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("From")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("RemindedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("To")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("BbsMessages");
-                });
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.6");
 
             modelBuilder.Entity("Monitor.Context.Entities.Config", b =>
                 {
@@ -87,7 +55,7 @@ namespace Monitor.Migrations
 
                     b.Property<string>("Frame")
                         .IsRequired()
-                        .HasMaxLength(512)
+                        .HasMaxLength(300)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsMeshtastic")
@@ -97,7 +65,7 @@ namespace Monitor.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Sender")
-                        .HasMaxLength(64)
+                        .HasMaxLength(16)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -168,9 +136,6 @@ namespace Monitor.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<long>("McuUptime")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("Meshtastic")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("NbError")

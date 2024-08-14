@@ -14,6 +14,7 @@ public:
     bool update(bool force = false);
     bool setWatchdog(uint16_t powerOffTime, uint8_t timeoutTime = WATCHDOG_TIMEOUT);
     bool setPowerOnOff(uint16_t powerOnVoltage, uint16_t powerOffVoltage);
+    void resetWatchdogSafety();
 
     inline int16_t getVoltageBattery() const {
         return vb;
@@ -57,6 +58,10 @@ public:
 
     inline uint8_t getWatchdogCounter() const {
         return watchdogCounter;
+    }
+
+    inline unsigned long getWatchdogSafetyTimeLeft() const {
+        return timerWatchdogSafety.getTimeLeft();
     }
 
     inline uint16_t getWatchdogPowerOffTime() const {

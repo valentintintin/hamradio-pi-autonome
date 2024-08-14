@@ -27,7 +27,7 @@ public class Message
             var propertyName = property.Name;
             var propertyValue = property.GetValue(this);
 
-            result += $"{propertyName}: {propertyValue}\n";
+            result += $"{propertyName}={propertyValue} | ";
         }
 
         return result;

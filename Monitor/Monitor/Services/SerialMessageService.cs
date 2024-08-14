@@ -12,6 +12,8 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
 
     public Message ParseMessage(string input)
     {
+        Logger.LogTrace("Received serial message : {input}", input);
+
         Message? message, messageTyped;
         
         try
@@ -66,9 +68,7 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
 
             throw new MessageParseException(e, input);
         }
-
-        Logger.LogInformation("Received serial message OK : {input}", input);
-
+        
         return messageTyped ?? message;
     }
 
@@ -90,6 +90,11 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
     public void SetNpr(bool enabled)
     {
         SendCommand($"npr {(enabled ? "1" : "0")}");
+    }
+
+    public void SetMeshtastic(bool enabled)
+    {
+        SendCommand($"msh {(enabled ? "1" : "0")}");
     }
 
     public void SendTelemetry()
@@ -140,6 +145,11 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
     public void SetSleep(bool enabled)
     {
         SetEepromMcu(4, enabled ? 1 : 0);
+    }
+
+    public void SetResetOnError(bool enabled)
+    {
+        SetEepromMcu(5, enabled ? 1 : 0);
     }
 
     public void SendLora(string message)

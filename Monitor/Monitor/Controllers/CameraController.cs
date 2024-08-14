@@ -37,6 +37,6 @@ public class CameraController(ILogger<CameraController> logger, CameraService ca
             Inline = true
         }.ToString());
         
-        return new FileStreamResult(await cameraService.CreateFinalImageFromLasts(save), "image/jpeg");
+        return new FileStreamResult(await cameraService.CaptureAndCreateMergedImage(save), "image/jpeg");
     }
 }

@@ -12,6 +12,8 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
     public required DbSet<Entities.System> Systems { get; set; }
     public required DbSet<LoRa> LoRas { get; set; }
     public required DbSet<Config> Configs { get; set; }
+    
+    public required DbSet<BbsMessage> BbsMessages { get; set; }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

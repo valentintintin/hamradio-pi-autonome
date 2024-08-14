@@ -12,6 +12,7 @@ Command::Command(System *system) {
 
     parser.registerCommand(PSTR("wifi"), PSTR("u"), doWifi);
     parser.registerCommand(PSTR("npr"), PSTR("u"), doNpr);
+    parser.registerCommand(PSTR("msh"), PSTR("u"), doMeshtastic);
     parser.registerCommand(PSTR("position"), PSTR(""), doPosition);
     parser.registerCommand(PSTR("telem"), PSTR(""), doTelemetry);
     parser.registerCommand(PSTR("telemParams"), PSTR(""), doTelemetryParams);
@@ -58,6 +59,14 @@ void Command::doNpr(MyCommandParser::Argument *args, char *response) {
     sprintf_P(response, PSTR("OK state %d"), state);
 }
 
+void Command::doMeshtastic(MyCommandParser::Argument *args, char *response) {
+    bool state = args[0].asInt64 > 0;
+
+    system->gpio.setMeshtastic(state);
+
+    sprintf_P(response, PSTR("OK state %d"), state);
+}
+
 void Command::doTelemetry(MyCommandParser::Argument *args, char *response) {
     system->forceSendTelemetry = true;
 
@@ -72,6 +81,7 @@ void Command::doPosition(MyCommandParser::Argument *args, char *response) {
 
 void Command::doTelemetryParams(MyCommandParser::Argument *args, char *response) {
     system->communication->shouldSendTelemetryParams = true;
+    system->forceSendTelemetry = true;
 
     sprintf_P(response, PSTR("OK"));
 }
@@ -109,7 +119,16 @@ void Command::doMpptPower(MyCommandParser::Argument *args, char *response) {
 }
 
 void Command::doSetEeprom(MyCommandParser::Argument *args, char *response) {
-    system->setFunctionAllowed((byte) args[0].asUInt64, args[1].asUInt64 == 1);
+    byte function = (byte) args[0].asUInt64;
+    bool allowed = args[1].asUInt64 == 1;
+
+    system->setFunctionAllowed(function, allowed);
+
+    if (function == EEPROM_ADDRESS_WATCHDOG_SAFETY && allowed) {
+        system->mpptMonitor.resetWatchdogSafety();
+    } else if (function == EEPROM_ADDRESS_RESET_ON_ERROR) {
+        system->nbError = 0;
+    }
 
     sprintf_P(response, EEPROM.read((int const) args[0].asUInt64) ? PSTR("OK") : PSTR("KO"));
 }
@@ -126,8 +145,8 @@ void Command::doSetTime(MyCommandParser::Argument *args, char *response) {
 void Command::doSleep(MyCommandParser::Argument *args, char *response) {
     uint64_t time = args[0].asUInt64;
 
-    if (time > 1) {
-        system->sleep(time);
+    if (time >= 1) {
+        system->sleep(time * 1000);
         sprintf_P(response, PSTR("OK"));
         return;
     }

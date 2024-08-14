@@ -11,7 +11,7 @@ public abstract class ASerialPortApp : AWorker
     private readonly string _fakeInput;
     protected SerialPort? SerialPort;
 
-    private readonly string _path;
+    private readonly string? _path;
     private readonly int _speed;
     private readonly bool _simulate;
 
@@ -24,9 +24,13 @@ public abstract class ASerialPortApp : AWorker
         
         var configurationSection = configuration.GetSection(configSectionName);
 
-        _path = configurationSection.GetValueOrThrow<string>("Path");
-        _speed = configurationSection.GetValueOrThrow<int>("Speed");
-        _simulate = configurationSection.GetValue<bool>("Simulate", false);
+        _simulate = configurationSection.GetValue("Simulate", false);
+        
+        if (!_simulate)
+        {
+            _path = configurationSection.GetValueOrThrow<string>("Path");
+            _speed = configurationSection.GetValueOrThrow<int>("Speed");
+        }
     }
 
     protected abstract Task MessageReceived(string input);
@@ -68,8 +72,6 @@ public abstract class ASerialPortApp : AWorker
                 {
                     var input = SerialPort.ReadLine();
                 
-                    Logger.LogDebug("Received serial : {input}", input);
-
                     MessageReceived(input);
                 }
                 catch (Exception e)

@@ -1,17 +1,18 @@
 @page "/History"
+@implements IAsyncDisposable
 
 @using Monitor.Models
 @using System.Globalization
 @using Monitor.Context
 @using Microsoft.EntityFrameworkCore
 @using Monitor.Extensions
-@using Monitor.Components
+@using Monitor.Components.Shared
 
 @inject IDbContextFactory<DataContext> DbContextFactory
 
 <PageTitle>Historique</PageTitle>
 
-<PageHeader Title="Historique" Subtitle="@DataVoltageBattery.LastOrDefault()?.date" />
+<PageHeader Title="Historique" Subtitle="@DataVoltage.LastOrDefault()?.date" />
 
 <Spin Spinning="Loading">
     <GridRow Gutter="(16, 16)" Justify="center">
@@ -30,8 +31,7 @@
         </GridCol>
     </GridRow>
     
-    <AntDesign.Charts.Line Data="DataVoltageBattery" Config="_configVoltageBattery"/>
-    <AntDesign.Charts.Line Data="DataVoltageSolar" Config="_configVoltageSolar"/>
+    <AntDesign.Charts.Line Data="DataVoltage" Config="_configVoltage"/>
     <AntDesign.Charts.Line Data="DataCurrent" Config="_configCurrent"/>
     <AntDesign.Charts.Line Data="DataWeather" Config="_configTemperature"/>
     <AntDesign.Charts.Line Data="DataWeatherPressure" Config="_configPressure"/>
@@ -76,9 +76,22 @@
     private readonly StatsView _temperature = new();
     private readonly StatsView _humidity = new();
     private readonly StatsView _pressure = new();
-    
+    private readonly LineConfig _configVoltage = Utils.GetLineConfig("Tension (V)", 11);
+    private readonly LineConfig _configCurrent = Utils.GetLineConfig("Courant (mA)");
+    private readonly LineConfig _configTemperature = Utils.GetLineConfig("Température (°C) / Humidité (%)", -10, 100);
+    private readonly LineConfig _configPressure = Utils.GetLineConfig("Pression atmosphérique (hPa)", 950, 1050);
+
+    private DataContext Context { get; set; } = null!;
+    private List<LineChartData<float>> DataVoltage { get; set; } = [];
+    private List<LineChartData<int>> DataCurrent { get; set; } = [];
+    private List<LineChartData<float>> DataWeather { get; set; } = [];
+    private List<LineChartData<float>> DataWeatherPressure { get; set; } = [];
+    private bool Loading { get; set; } = true;    
+
     protected override async Task OnInitializedAsync()
     {
+        Context = await DbContextFactory.CreateDbContextAsync();
+    
         await UpdateData();
         await base.OnInitializedAsync();
     }
@@ -86,16 +99,14 @@
     private async Task UpdateData()
     {
         Loading = true;
-        
-        var context = await DbContextFactory.CreateDbContextAsync();
 
-        _uptime.FromData(context.Systems.Select(d => new StatsView.UnitData
+        _uptime.FromData(Context.Systems.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.Uptime
         }));
 
-        var wakeupDozeOff = context.Systems.Select(d => new StatsView.UnitData
+        var wakeupDozeOff = Context.Systems.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.CreatedAt.ToUnixTimestamp()
@@ -104,83 +115,79 @@
         _wakeup.FromData(wakeupDozeOff.Select(d => d.First()));
         _dozeOff.FromData(wakeupDozeOff.Select(d => d.Last()));
 
-        _voltageBattery.FromData(context.Mppts.Select(d => new StatsView.UnitData
+        _voltageBattery.FromData(Context.Mppts.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.BatteryVoltage / 1000.0
         }));
         
-        _currentBattery.FromData(context.Mppts.Select(d => new StatsView.UnitData
+        _currentBattery.FromData(Context.Mppts.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.BatteryCurrent
         }));
         
-        _currentSolar.FromData(context.Mppts.Select(d => new StatsView.UnitData
+        _currentSolar.FromData(Context.Mppts.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.SolarCurrent
         }));
 
-        _loraAprsRx.FromData(context.LoRas.Where(l => !l.IsMeshtastic).Select(d => new StatsView.UnitData
+        _loraAprsRx.FromData(Context.LoRas.Where(l => !l.IsMeshtastic && !l.IsTx).Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
-            Value = d.IsTx ? 0 : 1
+            Value = 1
         }).GroupBy(d => d.DateTime.Date, (time, data) => new StatsView.UnitData
         {
             DateTime = time,
             Value = data.Sum(d => d.Value)
         }));
         
-        _loraMeshtasticRx.FromData(context.LoRas.Where(l => l.IsMeshtastic).Select(d => new StatsView.UnitData
+        _loraMeshtasticRx.FromData(Context.LoRas.Where(l => l.IsMeshtastic && !l.IsTx).Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
-            Value = d.IsTx ? 0 : 1
+            Value = 1
         }).GroupBy(d => d.DateTime.Date, (time, data) => new StatsView.UnitData
         {
             DateTime = time,
             Value = data.Sum(d => d.Value)
         }));
 
-        _temperature.FromData(context.Weathers.Select(d => new StatsView.UnitData
+        _temperature.FromData(Context.Weathers.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.Temperature
         }));
 
-        _humidity.FromData(context.Weathers.Select(d => new StatsView.UnitData
+        _humidity.FromData(Context.Weathers.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.Humidity
         }));
 
-        _pressure.FromData(context.Weathers.Select(d => new StatsView.UnitData
+        _pressure.FromData(Context.Weathers.Select(d => new StatsView.UnitData
         {
             DateTime = d.CreatedAt,
             Value = d.Pressure
         }));
         
-        var mpptData = await context.Mppts.OrderByDescending(m => m.Id)
+        var mpptData = await Context.Mppts.OrderByDescending(m => m.Id)
             .Take(500)
             .Reverse()
             .ToListAsync();
-        var weatherData = await context.Weathers.OrderByDescending(m => m.Id)
+        var weatherData = await Context.Weathers.OrderByDescending(m => m.Id)
             .Take(500)
             .Reverse()
             .ToListAsync();
         
-        DataVoltageBattery = mpptData.SelectMany(m => new List<LineChartData<float>>
+        DataVoltage = mpptData.SelectMany(m => new List<LineChartData<float>>
         {
             new()
             {
                 date = m.CreatedAt.ToFrench().ToString(CultureInfo.CurrentCulture),
                 type = "Tension batterie",
                 value = m.BatteryVoltage / 1000.0f
-            }
-        }).ToList();
-        
-        DataVoltageSolar = mpptData.SelectMany(m => new List<LineChartData<float>>
-        {
+            },
             new()
             {
                 date = m.CreatedAt.ToFrench().ToString(CultureInfo.CurrentCulture),
@@ -240,151 +247,8 @@
         await base.OnAfterRenderAsync(firstRender);
     }
 
-    List<LineChartData<float>> DataVoltageBattery { get; set; } = [];
-    List<LineChartData<float>> DataVoltageSolar { get; set; } = [];
-    List<LineChartData<int>> DataCurrent { get; set; } = [];
-    List<LineChartData<float>> DataWeather { get; set; } = [];
-    List<LineChartData<float>> DataWeatherPressure { get; set; } = [];
-
-    readonly LineConfig _configVoltageBattery = new()
+    public async ValueTask DisposeAsync()
     {
-        Padding = "auto",
-        AutoFit = true,
-        XField = nameof(LineChartData<object>.date),
-        YField = nameof(LineChartData<object>.value),
-        YAxis = new ValueAxis
-        {
-            Label = new BaseAxisLabel
-            {
-                Visible = true
-            },
-            Title = new BaseAxisTitle
-            {
-                Text = "Tension (V)",
-                Visible = true
-            },
-            Visible = true,
-            Min = 11
-        },
-        Legend = new Legend
-        {
-            Visible = false
-        },
-        SeriesField = nameof(LineChartData<object>.type),
-        Color = new [] { "blue" }
-    };
-    
-    readonly LineConfig _configVoltageSolar = new()
-    {
-        Padding = "auto",
-        AutoFit = true,
-        XField = nameof(LineChartData<object>.date),
-        YField = nameof(LineChartData<object>.value),
-        YAxis = new ValueAxis
-        {
-            Label = new BaseAxisLabel
-            {
-                Visible = true
-            },
-            Title = new BaseAxisTitle
-            {
-                Text = "Tension (V)",
-                Visible = true
-            },
-            Visible = true
-        },
-        Legend = new Legend
-        {
-            Visible = false
-        },
-        SeriesField = nameof(LineChartData<object>.type),
-        Color = new [] { "red" }
-    };
-    
-    readonly LineConfig _configCurrent = new()
-    {
-        Padding = "auto",
-        AutoFit = true,
-        XField = nameof(LineChartData<object>.date),
-        YField = nameof(LineChartData<object>.value),
-        YAxis = new ValueAxis
-        {
-            Label = new BaseAxisLabel
-            {
-                Visible = true
-            },
-            Title = new BaseAxisTitle
-            {
-                Text = "Courant (mA)",
-                Visible = true
-            },
-            Min = 0,
-            // Max = 1000,
-            Visible = true
-        },
-        Legend = new Legend
-        {
-            Position = "bottom"
-        },
-        SeriesField = nameof(LineChartData<object>.type),
-        Color = new [] { "blue", "red" }
-    };
-    
-    readonly LineConfig _configTemperature = new()
-    {
-        Padding = "auto",
-        AutoFit = true,
-        XField = nameof(LineChartData<object>.date),
-        YField = nameof(LineChartData<object>.value),
-        YAxis = new ValueAxis
-        {
-            Label = new BaseAxisLabel
-            {
-                Visible = true
-            },
-            Title = new BaseAxisTitle
-            {
-                Text = "Température (°C) / Humidité (%)"
-            },
-            Min = -10,
-            Max = 100,
-            Visible = true
-        },
-        Legend = new Legend
-        {
-            Position = "bottom"
-        },
-        SeriesField = nameof(LineChartData<object>.type),
-        Color = new [] { "blue", "red" }
-    };
-    
-    readonly LineConfig _configPressure = new()
-    {
-        Padding = "auto",
-        AutoFit = true,
-        XField = nameof(LineChartData<object>.date),
-        YField = nameof(LineChartData<object>.value),
-        YAxis = new ValueAxis
-        {
-            Label = new BaseAxisLabel
-            {
-                Visible = true
-            },
-            Title = new BaseAxisTitle
-            {
-                Text = "Pression atmosphérique (hPa)"
-            },
-            Min = 950,
-            Max = 1050,
-            Visible = true
-        },
-        Legend = new Legend
-        {
-            Position = "bottom"
-        },
-        SeriesField = nameof(LineChartData<object>.type),
-        Color = new [] { "blue" }
-    };
-
-    private bool Loading { get; set; } = true;
+        await Context.DisposeAsync();
+    }
 }

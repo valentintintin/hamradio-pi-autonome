@@ -53,12 +53,12 @@ public class BatteryApp : AWorker
             .Buffer(TimeSpan.FromMinutes(5))
             .Select(s => s.Any() ? s.Average() : int.MaxValue)
             .Where(_ => LowBatteryEnabled.IsTrue())
-            .Where(_ => !NightEnabled.Value || EntitiesManagerService.Entities.SolarIsDay.IsTrue())
+            .Where(_ => NightEnabled.IsFalse() || EntitiesManagerService.Entities.SolarIsDay.IsTrue()) // Only during the day of without night management
             .Do(s => Logger.LogDebug("Average Battery Voltage : {averageVoltage}", s))
             .Where(s => s < LowBatteryVoltage.Value)
             .Subscribe(s =>
             {
-                Logger.LogWarning("Battery is too low so sleep. {batteryVoltage} < {lowVoltage}", s, LowBatteryVoltage.Value);
+                Logger.LogInformation("Battery is too low so sleep. {batteryVoltage} < {lowVoltage}", s, LowBatteryVoltage.Value);
 
                 _systemService.AskForShutdown(LowBatteryTimeOff.Value);
             }));
@@ -83,67 +83,62 @@ public class BatteryApp : AWorker
             return;
         }
 
-        var timeSleep = NightTimeOff.Value;
-        var turnOn = NightTurnOn.IsTrue();
+        var durationSleep = NightTimeOff.Value;
+        var shouldSwitchOnDuringNight = NightTurnOn.IsTrue();
         var batteryVoltage = EntitiesManagerService.Entities.BatteryVoltage.Value;
         var limitVoltage = NightLimitVoltage.Value;
-        var sunRisingDateTime = SunCalc.GetSunPhases(DateTime.UtcNow, _position.latitude, _position.longitude, _position.altitude).First(e => e.Name.Value == SunPhaseName.Sunrise.Value).PhaseTime;
-
-        if (sunRisingDateTime < DateTime.UtcNow)
-        {
-            sunRisingDateTime = sunRisingDateTime.AddDays(1);
-        }
+        
+        // Ask for today (and tomorrow) sun rising end (morning)
+        var sunRisingDateTime = SunCalc.GetSunPhases(DateTime.UtcNow, _position.latitude, _position.longitude, _position.altitude)
+            .Concat(SunCalc.GetSunPhases(DateTime.UtcNow.AddDays(1), _position.latitude, _position.longitude, _position.altitude))
+            .First(e => e.Name.Value == SunPhaseName.SunriseEnd.Value && e.PhaseTime > DateTime.UtcNow)
+            .PhaseTime;
         
         if (batteryVoltage <= limitVoltage)
         {
             Logger.LogInformation("Night detected and Battery Voltage is {batteryVoltage} so below {limitVoltage}", batteryVoltage, limitVoltage);
             
-            turnOn = false;
+            shouldSwitchOnDuringNight = false;
         }
         
         if (NightUseSun.IsTrue())
         {
             var durationBeforeSunRinsing = sunRisingDateTime - DateTime.UtcNow;
-            Logger.LogDebug("Sun rising is in {duration} ==> {sunRisingDateTime}", durationBeforeSunRinsing,
-                sunRisingDateTime);
-            
+            Logger.LogDebug("Sun rising is in {duration} ==> {sunRisingDateTime}", durationBeforeSunRinsing, sunRisingDateTime);
+
             if (DateTime.UtcNow < sunRisingDateTime)
             {
-                if (turnOn)
+                if (shouldSwitchOnDuringNight)
                 {
-                    if (timeSleep > durationBeforeSunRinsing)
+                    if (durationSleep > durationBeforeSunRinsing)
                     {
                         Logger.LogInformation(
                             "Sleep too long and we will miss sunrise so sleep to sunrise instead of {duration}",
-                            timeSleep);
+                            durationSleep);
 
-                        timeSleep = durationBeforeSunRinsing;
+                        durationSleep = durationBeforeSunRinsing;
                     }
                 }
                 else
                 {
                     Logger.LogDebug("We do not turn on during night so sleep to sun rising");
 
-                    timeSleep = durationBeforeSunRinsing;
+                    durationSleep = durationBeforeSunRinsing; // Instead of using our default settings
                 }
-            }
-            else
-            {
-                Logger.LogDebug("We can't use sun rising because of false value");
             }
         }
         else
         {
             Logger.LogDebug("We do not use sun");
             
-            if (!turnOn)
+            if (!shouldSwitchOnDuringNight)
             {
                 Logger.LogDebug("We do not turn on during night");
                 
-                timeSleep = TimeSpan.FromHours(10);
+                durationSleep = TimeSpan.FromHours(10);
             }
         }
 
-        _systemService.AskForShutdown(timeSleep);
+        _systemService.AskForShutdown(durationSleep);
     }
 }

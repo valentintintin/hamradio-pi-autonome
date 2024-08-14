@@ -35,9 +35,9 @@ public class SystemService(ILogger<SystemService> logger, SerialMessageService s
 
     public void SetTime(DateTime dateTime)
     {
-        if (Math.Abs((DateTime.UtcNow - dateTime).TotalSeconds) <= 20)
+        if (Math.Abs((DateTime.UtcNow - dateTime).TotalMinutes) < 1)
         {
-            Logger.LogDebug("Change dateTime not done because difference is < 10 second : {now} and {new}", DateTime.UtcNow, dateTime);
+            Logger.LogDebug("Change dateTime not done because difference is < 1 minute : {now} and {new}", DateTime.UtcNow, dateTime);
             return;
         }
         

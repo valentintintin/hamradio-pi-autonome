@@ -32,6 +32,18 @@ void receivedEvent(uint8_t * payload, uint16_t size, int16_t rssi, int8_t snr) {
     communication.received(payload, size, rssi, snr);
 }
 
+void radioRxErrorEvent() {
+    systemControl.serialError(PSTR("Radio RX error"));
+}
+
+void radioTxTimeoutEvent() {
+    systemControl.serialError(PSTR("Radio TX Timeout"));
+}
+
+void radioRxTimeoutEvent() {
+    systemControl.serialError(PSTR("Radio RX Timeout"));
+}
+
 void onWakeUp() {
     CySoftwareReset();
 }
@@ -39,12 +51,15 @@ void onWakeUp() {
 void setup() {
     radioEvents.RxDone = receivedEvent;
     radioEvents.TxDone = sentEvent;
+    radioEvents.RxError = radioRxErrorEvent;
+    radioEvents.TxTimeout = radioTxTimeoutEvent;
+    radioEvents.RxTimeout = radioRxTimeoutEvent;
     TimerInit(&wakeUpEvent, onWakeUp);
 
     boardInitMcu();
 
-    pinMode(Vext, OUTPUT);
-    digitalWrite(Vext, LOW); // 3.3V
+//    pinMode(Vext, OUTPUT);
+//    digitalWrite(Vext, LOW); // 3.3V // --> Meshtastic on this pin
 
     Serial.begin(115200);
 #ifdef USE_SOFT_SERIAL

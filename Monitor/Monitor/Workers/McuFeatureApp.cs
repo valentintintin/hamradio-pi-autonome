@@ -16,38 +16,39 @@ public class McuFeatureApp : AWorker
     protected override Task Start(CancellationToken cancellationToken)
     {
         AddDisposable(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueToChange()
-            .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("Watchdog Safety => {value}", v))
-            .Select(v => v.value)
+            .Select(v => v.valueToChange)
             .Subscribe(_serialMessageService.SetWatchdogSafety)
         );
         
         AddDisposable(EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.ValueToChange()
-            .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("APRS DigiPeater => {value}", v))
-            .Select(v => v.value)
+            .Select(v => v.valueToChange)
             .Subscribe(_serialMessageService.SetAprsDigipeater)
         );
         
         AddDisposable(EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.ValueToChange()
-            .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("APRS Telemetry => {value}", v))
-            .Select(v => v.value)
+            .Select(v => v.valueToChange)
             .Subscribe(_serialMessageService.SetAprsTelemetry)
         );
         
         AddDisposable(EntitiesManagerService.Entities.FeatureAprsPositionEnabled.ValueToChange()
-            .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("APRS Position => {value}", v))
-            .Select(v => v.value)
+            .Select(v => v.valueToChange)
             .Subscribe(_serialMessageService.SetAprsPosition)
         );
 
         AddDisposable(EntitiesManagerService.Entities.FeatureSleepEnabled.ValueToChange()
-            .Sample(TimeSpan.FromSeconds(1))
             .Do(v => Logger.LogDebug("Sleep => {value}", v))
-            .Select(v => v.value)
+            .Select(v => v.valueToChange)
             .Subscribe(_serialMessageService.SetSleep)
+        );
+
+        AddDisposable(EntitiesManagerService.Entities.FeatureResetOnErrorEnabled.ValueToChange()
+            .Do(v => Logger.LogDebug("Reset on error => {value}", v))
+            .Select(v => v.valueToChange)
+            .Subscribe(_serialMessageService.SetResetOnError)
         );
 
         return Task.CompletedTask;

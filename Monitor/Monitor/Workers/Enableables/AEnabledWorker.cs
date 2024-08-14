@@ -2,15 +2,15 @@ using System.Reactive.Linq;
 using Monitor.Extensions;
 using Monitor.Models;
 
-namespace Monitor.Workers;
+namespace Monitor.Workers.Enableables;
 
 public abstract class AEnabledWorker : AWorker
 {
     public readonly ConfigEntity<bool> Enabled;
     
-    protected AEnabledWorker(ILogger<AEnabledWorker> logger, IServiceProvider serviceProvider) : base(logger, serviceProvider)
+    protected AEnabledWorker(ILogger<AEnabledWorker> logger, IServiceProvider serviceProvider, bool enabled = true) : base(logger, serviceProvider)
     {
-        Enabled = new ConfigEntity<bool>($"worker/{GetType().Name.ToLower().Replace("app", "")}", true, true);
+        Enabled = new ConfigEntity<bool>($"worker/{GetType().Name.ToLower().Replace("app", "")}", true, enabled);
         EntitiesManagerService.Add(Enabled);
     }
 

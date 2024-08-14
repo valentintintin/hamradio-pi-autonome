@@ -12,8 +12,9 @@ using MQTTnet.Formatter;
 
 namespace Monitor.Services;
 
-public class EntitiesManagerService : AService, IAsyncDisposable
+public class EntitiesManagerService : BackgroundService
 {
+    private readonly ILogger<EntitiesManagerService> _logger;
     public static MqttEntities Entities { get; } = new();
 
     private readonly string _topicBase;
@@ -25,8 +26,9 @@ public class EntitiesManagerService : AService, IAsyncDisposable
 
     public EntitiesManagerService(ILogger<EntitiesManagerService> logger, 
         IConfiguration configuration, IServiceProvider serviceProvider,
-        IDbContextFactory<DataContext> contextFactory) : base(logger)
+        IDbContextFactory<DataContext> contextFactory)
     {
+        _logger = logger;
         _configurationSection = configuration.GetSection("Mqtt");
         _topicBase = _configurationSection.GetValueOrThrow<string>("TopicBase");
         _clientId = _configurationSection.GetValueOrThrow<string>("ClientId");
@@ -42,7 +44,7 @@ public class EntitiesManagerService : AService, IAsyncDisposable
 
         _mqttClient.ConnectedAsync += async _ =>
         {
-            Logger.LogInformation("Connection successful to MQTT");
+            _logger.LogInformation("Connection successful to MQTT");
             
             await _mqttClient.SubscribeAsync(
                 new MqttTopicFilterBuilder()
@@ -54,20 +56,20 @@ public class EntitiesManagerService : AService, IAsyncDisposable
 
         _mqttClient.DisconnectedAsync += async args => 
         {
-            logger.LogError(args.Exception, "MQTT disconnected");
+            _logger.LogWarning(args.Exception, "MQTT disconnected");
             
-            await Task.Delay(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromMinutes(1));
             await ConnectMqtt();
         };
     }
 
     public async Task ConnectMqtt()
     {
-        Logger.LogInformation("Run connection to MQTT");
+        _logger.LogInformation("Run connection to MQTT");
         
         await _mqttClient.ConnectAsync(new MqttClientOptionsBuilder()
             .WithTcpServer(_configurationSection.GetValueOrThrow<string>("Host"), _configurationSection.GetValue("Port", 1883))
-            .WithKeepAlivePeriod(TimeSpan.FromMinutes(1))
+            .WithKeepAlivePeriod(TimeSpan.FromMinutes(5))
             .WithClientId(_clientId)
             .WithProtocolVersion(MqttProtocolVersion.V500)
             .Build());
@@ -80,7 +82,7 @@ public class EntitiesManagerService : AService, IAsyncDisposable
         {
             var value = configEntity.ValueAsString();
             
-            Logger.LogTrace("Add entity {entity} with value {value}", configEntity.Id, value);
+            _logger.LogTrace("Add entity {entity} with value {value}", configEntity.Id, value);
 
             config = new Config
             {
@@ -100,7 +102,7 @@ public class EntitiesManagerService : AService, IAsyncDisposable
         configEntity.ValueStringAsync()
             .SubscribeAsync(async value =>
             {
-                Logger.LogTrace("Update {entityId} to {state}", configEntity.Id, value);
+                _logger.LogTrace("Update {entityId} to {state}", configEntity.Id, value);
 
                 if (config != null)
                 {
@@ -110,7 +112,7 @@ public class EntitiesManagerService : AService, IAsyncDisposable
                 
                 if (configEntity.SendToMqtt && _mqttClient.IsConnected)
                 {
-                    Logger.LogTrace("Send MQTT {entityId} to {state}", configEntity.Id, value);
+                    _logger.LogTrace("Send MQTT {entityId} to {state}", configEntity.Id, value);
 
                     var mqttApplicationMessage = new MqttApplicationMessageBuilder()
                         .WithTopic($"{_topicBase}/{configEntity.Id}")
@@ -135,9 +137,13 @@ public class EntitiesManagerService : AService, IAsyncDisposable
             });
         }
     }
-
-    public async ValueTask DisposeAsync()
+    
+    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        await ConnectMqtt();
+
+        cancellationToken.WaitHandle.WaitOne();
+        
         if (_mqttClient.IsConnected)
         {
             await _mqttClient.DisconnectAsync();
@@ -147,8 +153,9 @@ public class EntitiesManagerService : AService, IAsyncDisposable
 
 public record MqttEntities
 {
-    public ConfigEntity<bool> GpioWifi { get; } = new("gpio/wifi");
-    public ConfigEntity<bool> GpioNpr { get; } = new("gpio/npr");
+    public ConfigEntity<bool> GpioWifi { get; } = new("gpio/wifi", false, false, true, true);
+    public ConfigEntity<bool> GpioNpr { get; } = new("gpio/npr", false, false, true, true);
+    public ConfigEntity<bool> GpioMeshtastic { get; } = new("gpio/meshtastic", false, false, true, true);
     public ConfigEntity<int> GpioBoxLdr { get; } = new("gpio/box_ldr");
 
     public ConfigEntity<bool> StatusBoxOpened { get; } = new("status/box_opened", false, default, true);
@@ -162,6 +169,7 @@ public record MqttEntities
     public ConfigEntity<bool> FeatureAprsTelemetryEnabled { get; } = new("feature/aprs_telemetry", true, true, false, true);
     public ConfigEntity<bool> FeatureAprsPositionEnabled { get; } = new("feature/aprs_position", true, true, false, true);
     public ConfigEntity<bool> FeatureSleepEnabled { get; } = new("feature/sleep", true, false, false, true);
+    public ConfigEntity<bool> FeatureResetOnErrorEnabled { get; } = new("feature/reset_on_error", true, false, false, true);
 
     public ConfigEntity<float> WeatherTemperature { get; } = new("weather/temperature", false, default, true);
     public ConfigEntity<float> WeatherHumidity { get; } = new("weather/humidity", false, default, true);

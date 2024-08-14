@@ -60,6 +60,11 @@ public class FswebcamParameters
         }
     }
 
+    public string NameSanitized => Device
+        .Replace("/dev/v4l/by-id/", string.Empty)
+        .Replace("/dev/video_", string.Empty)
+        .Replace("/dev/video", string.Empty);
+
     public override string ToString()
     {
         StringBuilder arguments = new();

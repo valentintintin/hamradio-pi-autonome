@@ -38,24 +38,44 @@
       <Content Include=".dockerignore">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
+      <Content Update="appsettings.Production.json">
+        <DependentUpon>appsettings.json</DependentUpon>
+      </Content>
+      <Content Update="nlog.Production.config">
+        <DependentUpon>nlog.config</DependentUpon>
+      </Content>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="AntDesign" Version="0.18.3" />
-      <PackageReference Include="AntDesign.Charts" Version="0.5.1" />
+      <PackageReference Include="AntDesign" Version="0.19.7" />
+      <PackageReference Include="AntDesign.Charts" Version="0.5.5" />
       <PackageReference Include="AprsSharp.AprsIsClient" Version="0.3.1" />
       <PackageReference Include="JoySoftware.NetDaemon.Extensions.Scheduling" Version="23.44.1" />
       <PackageReference Include="Meshtastic" Version="1.0.0" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.7">
         <PrivateAssets>all</PrivateAssets>
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       </PackageReference>
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.4" />
-      <PackageReference Include="MQTTnet" Version="4.3.3.952" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.7" />
+      <PackageReference Include="MQTTnet" Version="4.3.6.1152" />
+      <PackageReference Include="NLog.Targets.Seq" Version="4.0.1" />
+      <PackageReference Include="NLog.Web.AspNetCore" Version="5.3.11" />
       <PackageReference Include="Seq.Extensions.Logging" Version="8.0.0" />
       <PackageReference Include="SunCalcNet" Version="1.2.2" />
       <PackageReference Include="System.IO.Ports" Version="8.0.0" />
-      <PackageReference Include="System.Reactive" Version="6.0.0" />
+      <PackageReference Include="System.Reactive" Version="6.0.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="Pages\History.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Index.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Settings.razor" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <AdditionalFiles Include="Components\Pages\History.razor" />
+      <AdditionalFiles Include="Components\Pages\Home.razor" />
+      <AdditionalFiles Include="Components\Pages\Settings.razor" />
     </ItemGroup>
 
 </Project>

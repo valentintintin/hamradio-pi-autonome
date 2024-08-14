@@ -1,8 +1,7 @@
 using System.Reactive.Concurrency;
-using System.Reactive.Linq;
 using Monitor.Services;
 
-namespace Monitor.Workers;
+namespace Monitor.Workers.Enableables;
 
 public class WatchdogApp : AEnabledWorker
 {
@@ -10,7 +9,7 @@ public class WatchdogApp : AEnabledWorker
     private readonly SystemService _systemService;
     private readonly IScheduler _scheduler;
     
-    public WatchdogApp(ILogger<WatchdogApp> logger, IServiceProvider serviceProvider) : base(logger, serviceProvider)
+    public WatchdogApp(ILogger<WatchdogApp> logger, IServiceProvider serviceProvider) : base(logger, serviceProvider, false)
     {
         _serialMessageService = Services.GetRequiredService<SerialMessageService>();
         _systemService = Services.GetRequiredService<SystemService>();
@@ -26,6 +25,8 @@ public class WatchdogApp : AEnabledWorker
 
     protected override Task Start(CancellationToken cancellationToken)
     {
+        FeedDog();
+        
         AddDisposable(_scheduler.SchedulePeriodic(TimeSpan.FromSeconds(5), () =>
         {
             if (!_systemService.IsShutdownAsked())
@@ -33,7 +34,7 @@ public class WatchdogApp : AEnabledWorker
                 FeedDog();
             }
         }));
-
+        
         return Task.CompletedTask;
     }
 

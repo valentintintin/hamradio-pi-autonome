@@ -23,9 +23,18 @@ public class MpptApp : AWorker
 
         AddDisposable(EntitiesManagerService.Entities.MpptAlertShutdown.ValueChanges()
             .Select(v => v.value)
-            .Do(_ => Logger.LogWarning("Alert so shutdown"))
             .SubscribeAsync(async _ =>
             {
+                Logger.LogInformation("Alert so shutdown");
+                await _systemService.Shutdown();
+            }));
+
+        AddDisposable(EntitiesManagerService.Entities.McuStatus.ValueChanges()
+            .Where(v => v.value?.Contains("Restart", StringComparison.CurrentCultureIgnoreCase) ?? false)
+            .SubscribeAsync(async _ =>
+            {
+                Logger.LogInformation("Received MCU Watchdog trigger warning so shutdown");
+                
                 await _systemService.Shutdown();
             }));
 

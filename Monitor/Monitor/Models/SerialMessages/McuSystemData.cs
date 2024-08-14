@@ -16,6 +16,12 @@ public class McuSystemData : Message
     [JsonPropertyName("uptime")] 
     public long Uptime { get; set; }
 
+    [JsonPropertyName("nbError")] 
+    public int NbError { get; set; }
+
+    [JsonPropertyName("watchdogSafetyTimer")]
+    public long WatchdogSafetyTimer { get; set; }
+
     [JsonPropertyName("watchdogSafety")]
     public bool WatchdogSafetyEnabled { get; set; }
 
@@ -30,6 +36,9 @@ public class McuSystemData : Message
 
     [JsonPropertyName("sleep")]
     public bool Sleep { get; set; }
+
+    [JsonPropertyName("resetError")]
+    public bool ResetError { get; set; }
 
     [JsonPropertyName("temperatureRtc")]
     public float TemperatureRtc { get; set; }

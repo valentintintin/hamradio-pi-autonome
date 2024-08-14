@@ -26,7 +26,7 @@ bool System::begin(RadioEvents_t *radioEvents) {
 
 #ifdef USE_SCREEN
     if (!display->init()) {
-        serialError(PSTR("[SYSTEM] Display error"));
+        serialError(PSTR("[SYSTEM] Display error"), false);
     }
 #endif
 
@@ -42,6 +42,7 @@ bool System::begin(RadioEvents_t *radioEvents) {
         setFunctionAllowed(EEPROM_ADDRESS_APRS_TELEMETRY, functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY]);
         setFunctionAllowed(EEPROM_ADDRESS_APRS_POSITION, functionsAllowed[EEPROM_ADDRESS_APRS_POSITION]);
         setFunctionAllowed(EEPROM_ADDRESS_SLEEP, functionsAllowed[EEPROM_ADDRESS_SLEEP]);
+        setFunctionAllowed(EEPROM_ADDRESS_RESET_ON_ERROR, functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR]);
 
         EEPROM.write(EEPROM_ADDRESS_VERSION, EEPROM_VERSION);
         EEPROM.commit();
@@ -51,14 +52,16 @@ bool System::begin(RadioEvents_t *radioEvents) {
         functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY] = EEPROM.read(EEPROM_ADDRESS_APRS_TELEMETRY);
         functionsAllowed[EEPROM_ADDRESS_APRS_POSITION] = EEPROM.read(EEPROM_ADDRESS_APRS_POSITION);
         functionsAllowed[EEPROM_ADDRESS_SLEEP] = EEPROM.read(EEPROM_ADDRESS_SLEEP);
+        functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR] = EEPROM.read(EEPROM_ADDRESS_RESET_ON_ERROR);
     }
 
-    sprintf_P(bufferText, PSTR("Watchdog safety: %d Aprs Digi : %d Telem : %d Position : %d Sleep : %d"),
+    sprintf_P(bufferText, PSTR("Watchdog safety: %d Aprs Digi : %d Telem : %d Position : %d Sleep : %d Reset : %d"),
             functionsAllowed[EEPROM_ADDRESS_WATCHDOG_SAFETY],
             functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER],
             functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY],
             functionsAllowed[EEPROM_ADDRESS_APRS_POSITION],
-            functionsAllowed[EEPROM_ADDRESS_SLEEP]
+            functionsAllowed[EEPROM_ADDRESS_SLEEP],
+            functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR]
     );
 
     Log.infoln(F("[SYSTEM] EEPROM %s"), bufferText);
@@ -69,8 +72,8 @@ bool System::begin(RadioEvents_t *radioEvents) {
     communication->begin(radioEvents);
 
     if (USE_RTC) {
-        if (SET_RTC > 0 && RTClib::now().year() < 2023) {
-            Log.warningln(F("[TIME] Set clock to %l"), SET_RTC + 60);
+        if (SET_RTC > 0 && RTClib::now().year() < CURRENT_YEAR) {
+            Log.warningln(F("[TIME] Set clock to %u"), SET_RTC + 60);
             RTC.setEpoch(SET_RTC + 60);
         }
 
@@ -110,7 +113,7 @@ void System::update() {
         streamReceived->flush();
     } else {
         if (timerSecond.hasExpired()) {
-            if (timerBoxOpened.hasExpired() && isBoxOpened()) {
+            if (timerBoxOpened.hasExpired() && isBoxOpened() && millis() >= 600000) { // 10 minutes
                 Log.warningln(F("[SYSTEM] Box opened !"));
                 printJsonSystem(PSTR("alert"));
 
@@ -137,7 +140,7 @@ void System::update() {
                 gpio.setWifi(false);
             }
 
-            if (isFunctionAllowed(EEPROM_ADDRESS_SLEEP) && mpptMonitor.getVoltageBattery() < VOLTAGE_TO_SLEEP) {
+            if (isFunctionAllowed(EEPROM_ADDRESS_SLEEP) && mpptMonitor.getVoltageBattery() < VOLTAGE_TO_SLEEP && millis() >= DURATION_TO_WAIT_BEFORE_SLEEP) {
                 Log.infoln(F("[SLEEP] Battery is %dV and under of %dV so sleep"), mpptMonitor.getVoltageBattery(), VOLTAGE_TO_SLEEP);
                 displayText(PSTR("Sleep"), PSTR("Battery too low so sleep"), 1000);
                 sleep(SLEEP_DURATION);
@@ -149,7 +152,7 @@ void System::update() {
         ) {
             communication->update(forceSendTelemetry || timerTelemetry.hasExpired(),
                                   forceSendPosition || timerPosition.hasExpired(),
-                                  forceSendPosition || timerStatus.hasExpired());
+                                  timerStatus.hasExpired());
             forceSendTelemetry = false;
             forceSendPosition = false;
 
@@ -246,8 +249,9 @@ void System::displayText(const char *title, const char *content, uint16_t pause)
 
 DateTime System::nowToString(char *result) {
     DateTime now = RTClib::now();
-    if (now.year() < CURRENT_YEAR) {
-        Log.warningln("[TIME] Use System instead of RTC");
+    if (abs(CURRENT_YEAR - now.year()) >= 2) {
+        sprintf(result, "%04d-%02d-%02dT%02d:%02d:%02d Uptime %lds", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(), millis() / 1000);
+        Log.warningln("[TIME] Use System instead of RTC. RTC date : %s", result);
         now = DateTime(TimerGetSysTime().Seconds);
     }
     sprintf(result, "%04d-%02d-%02dT%02d:%02d:%02d Uptime %lds", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(), millis() / 1000);
@@ -264,9 +268,12 @@ bool System::isBoxOpened() const {
     return millis() >= 60000 && gpio.getLdr() >= LDR_ALARM_LEVEL;
 }
 
-void System::serialError(const char *content) {
+void System::serialError(const char *content, bool addError) {
     turnOnRGB(COLOR_VIOLET);
     Log.errorln(content);
+    if (addError) {
+        this->addError();
+    }
     printJsonSystem((char*)content);
     delay(2000);
     turnOffRGB();
@@ -281,11 +288,13 @@ void System::setFunctionAllowed(byte function, bool allowed) {
 
     EEPROM.write(function, allowed);
     EEPROM.commit();
+
+    timerState.setExpired();
 }
 
 void System::printJsonSystem(const char *state) {
     DateTime now = nowToString(bufferText);
-    
+
     serialJsonWriter
             .beginObject()
             .property(F("type"), PSTR("system"))
@@ -294,31 +303,45 @@ void System::printJsonSystem(const char *state) {
             .property(F("temperatureRtc"), RTC.getTemperature())
             .property(F("time"), now.unixtime())
             .property(F("uptime"), millis() / 1000)
+            .property(F("nbError"), nbError)
+            .property(F("watchdogSafetyTimer"), mpptMonitor.getWatchdogSafetyTimeLeft())
             .property(F("watchdogSafety"), functionsAllowed[EEPROM_ADDRESS_WATCHDOG_SAFETY])
             .property(F("aprsDigipeater"), functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER])
             .property(F("aprsTelemetry"), functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY])
             .property(F("aprsPosition"), functionsAllowed[EEPROM_ADDRESS_APRS_POSITION])
             .property(F("sleep"), functionsAllowed[EEPROM_ADDRESS_SLEEP])
+            .property(F("resetError"), functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR])
             .endObject(); SerialPi->println();
 
     gpio.printJson();
 
-    Log.infoln(F("[TIME] %s. Temperature RTC: %fC"), bufferText, RTC.getTemperature());
+    Log.infoln(F("[TIME] %s. Temperature RTC: %FC"), bufferText, RTC.getTemperature());
     displayText(PSTR("Time"), bufferText, 1000);
+
+    Log.infoln(F("[SYSTEM] EEPROM Watchdog safety: %T Aprs Digi : %T Telem : %T Position : %T Sleep : %T Reset : %T"),
+               functionsAllowed[EEPROM_ADDRESS_WATCHDOG_SAFETY],
+               functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER],
+               functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY],
+               functionsAllowed[EEPROM_ADDRESS_APRS_POSITION],
+               functionsAllowed[EEPROM_ADDRESS_SLEEP],
+               functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR]
+    );
 }
 
 void System::sleep(uint64_t time) {
     turnOnRGB(COLOR_BLUE);
 
-    sprintf_P(bufferText, PSTR("[SLEEP] Sleep during %dms"), time);
+    sprintf_P(bufferText, PSTR("[SLEEP] Sleep during %ums"), time);
     Log.infoln(bufferText);
     displayText("Sleep", bufferText);
     
     gpio.setNpr(false);
     gpio.setWifi(false);
+    gpio.setMeshtastic(false);
+    mpptMonitor.setWatchdog(SLEEP_DURATION + DURATION_TO_WAIT_BEFORE_SLEEP + 10000, 1);
 
     turnScreenOff();
-    digitalWrite(Vext, HIGH); // 0V
+//    digitalWrite(Vext, HIGH); // 0V // --> Meshtastic on this pin
     Radio.Sleep();
     TimerSetValue(wakeUpEvent, time);
     TimerStart(wakeUpEvent);
@@ -331,3 +354,38 @@ void System::resetTimerJson() {
     mpptMonitor.update(true);
     weatherSensors.update(true);
 }
+
+void System::addError() {
+    nbError++;
+
+    Log.infoln(F("[SYSTEM] Add error : %d"), nbError);
+
+    if (nbError >= MAX_ERROR_TO_RESET && isFunctionAllowed(EEPROM_ADDRESS_RESET_ON_ERROR)) {
+        Log.warningln(F("[SYSTEM] Nb error too high so we reboot"));
+        delay(500);
+        CySoftwareReset();
+    }
+}
+
+void System::removeOneError() {
+    if (nbError > 0) {
+        nbError--;
+        Log.traceln(F("[SYSTEM] Remove an error: %d"), nbError);
+    }
+}
+
+//void EEPROM_writeInt(int address, int value) {
+//    byte lowByte = value & 0xFF; // low part
+//    byte highByte = (value >> 8) & 0xFF;
+//
+//    EEPROM.write(address, lowByte);
+//    EEPROM.write(address + 1, highByte);
+//    EEPROM.commit();
+//}
+//
+//int EEPROM_readInt(int address) {
+//    byte lowByte = EEPROM.read(address);
+//    byte highByte = EEPROM.read(address + 1);
+//
+//    return (highByte << 8) | lowByte;
+//}

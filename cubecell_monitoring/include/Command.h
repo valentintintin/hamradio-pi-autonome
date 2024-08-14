@@ -22,6 +22,8 @@ private:
 
     static void doNpr(MyCommandParser::Argument *args, char *response);
 
+    static void doMeshtastic(MyCommandParser::Argument *args, char *response);
+
     static void doPosition(MyCommandParser::Argument *args, char *response);
 
     static void doTelemetry(MyCommandParser::Argument *args, char *response);

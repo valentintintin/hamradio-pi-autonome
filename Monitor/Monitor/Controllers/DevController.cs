@@ -27,7 +27,7 @@ public class DevController(
     [HttpGet("reset_database")]
     public void ResetDatabase()
     {
-        Logger.LogDebug("Reset database");
+        Logger.LogInformation("Reset database");
         
         _context.LoRas.RemoveRange(_context.LoRas);
         _context.Systems.RemoveRange(_context.Systems);

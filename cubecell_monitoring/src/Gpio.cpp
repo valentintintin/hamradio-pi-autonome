@@ -7,6 +7,7 @@
 Gpio::Gpio(System *system) : system(system) {
     setWifi(wifi);
     setNpr(npr);
+    setMeshtastic(meshtastic);
     initialized = true;
 }
 
@@ -22,7 +23,7 @@ void Gpio::setState(uint8_t pin, bool enabled, const char* name, bool &status, b
     status = enabled;
 
     if (initialized) {
-        Log.infoln(F("[GPIO] %s (%d) change to state %d"), name, pin, status);
+        Log.infoln(F("[GPIO] %s (%d) change to state %T"), name, pin, status);
 
         printJson();
     }
@@ -41,28 +42,33 @@ void Gpio::setNpr(bool enabled) {
 }
 
 uint16_t Gpio::getLdr() const {
-    return getAdcState(PIN_LDR, PSTR("LDR"));
+//    return getAdcState(PIN_LDR, PSTR("LDR"));
+    return getState(PIN_LDR, PSTR("LDR")) ? 0 : LDR_ALARM_LEVEL;
 }
 
-bool Gpio::getState(uint8_t pin, const char* name) {
+void Gpio::setMeshtastic(bool enabled) {
+    setState(PIN_MESHTASTIC, enabled, PSTR("MESH"), meshtastic);
+}
+
+bool Gpio::getState(uint8_t pin, const char* name) const {
     pinMode(pin, INPUT);
     return digitalRead(pin);
 }
 
 uint16_t Gpio::getAdcState(uint8_t pin, const char *name) const {
     pinMode(pin, INPUT);
-
     return analogRead(pin);
 }
 
 void Gpio::printJson() const {
-    Log.infoln(F("[GPIO] Wifi: %d NPR: %d Box LDR: %d"), isWifiEnabled(), isNprEnabled(), getLdr());
+    Log.infoln(F("[GPIO] Wifi: %T NPR: %T Msh: %T Box LDR: %d"), isWifiEnabled(), isNprEnabled(), isMeshtasticEnabled(), getLdr());
 
     serialJsonWriter
             .beginObject()
             .property(F("type"), PSTR("gpio"))
             .property(F("wifi"), isWifiEnabled())
             .property(F("npr"), isNprEnabled())
+            .property(F("msh"), isMeshtasticEnabled())
             .property(F("ldr"), getLdr())
             .endObject(); SerialPi->println();
 }

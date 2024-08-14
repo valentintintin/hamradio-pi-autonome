@@ -9,6 +9,8 @@ public class System : IEntity
     
     public bool Wifi { get; set; }
     
+    public bool Meshtastic { get; set; }
+    
     public bool BoxOpened { get; set; }
     
     public long Uptime { get; set; }
@@ -16,4 +18,6 @@ public class System : IEntity
     public long McuUptime { get; set; }
     
     public float TemperatureRtc { get; set; }
+    
+    public int NbError { get; set; }
 }
