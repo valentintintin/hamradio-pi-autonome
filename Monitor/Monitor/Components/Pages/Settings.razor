@@ -165,8 +165,8 @@
         <Card Title="Fonctions MCU">
             <ChildContent>
             <Descriptions Bordered="true" Column="1">
-                <DescriptionsItem Title="Watchdog Safety">
-                    <Switch @bind-Checked="EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.Value"></Switch>
+                <DescriptionsItem Title="MPPT Watchdog Safety">
+                    <Switch @bind-Checked="EntitiesManagerService.Entities.FeatureMpptWatchdogSafetyEnabled.Value"></Switch>
                 </DescriptionsItem>
                 <DescriptionsItem Title="APRS DigiPeater">
                     <Switch @bind-Checked="EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.Value"></Switch>
@@ -182,6 +182,12 @@
                 </DescriptionsItem>
                 <DescriptionsItem Title="Reset si erreur">
                     <Switch @bind-Checked="EntitiesManagerService.Entities.FeatureResetOnErrorEnabled.Value"></Switch>
+                </DescriptionsItem>
+                <DescriptionsItem Title="Watchdog">
+                    <Switch @bind-Checked="EntitiesManagerService.Entities.FeatureWatchdogEnabled.Value"></Switch>
+                </DescriptionsItem>
+                <DescriptionsItem Title="Watchdog LoRa TX">
+                    <Switch @bind-Checked="EntitiesManagerService.Entities.FeatureWatchdogLoraTxEnabled.Value"></Switch>
                 </DescriptionsItem>
                 <DescriptionsItem Title="Données">
                     <Button Type="@ButtonType.Primary" OnClick="RefreshMcuData">Raffraîchir</Button>

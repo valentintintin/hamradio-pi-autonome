@@ -10,7 +10,7 @@ extern softSerial *SerialPi = new softSerial(PIN_PI_TX, PIN_PI_RX);
 extern HardwareSerial *SerialPi = &Serial1;
 #endif
 extern JsonWriter serialJsonWriter(SerialPi);
-extern char bufferText[255]{};
+extern char bufferText[BUFFER_LENGTH]{};
 
 RadioEvents_t radioEvents;
 TimerEvent_t wakeUpEvent;
@@ -34,14 +34,17 @@ void receivedEvent(uint8_t * payload, uint16_t size, int16_t rssi, int8_t snr) {
 
 void radioRxErrorEvent() {
     systemControl.serialError(PSTR("Radio RX error"));
+    Radio.RxBoosted(0);
 }
 
 void radioTxTimeoutEvent() {
     systemControl.serialError(PSTR("Radio TX Timeout"));
+    Radio.RxBoosted(0);
 }
 
 void radioRxTimeoutEvent() {
     systemControl.serialError(PSTR("Radio RX Timeout"));
+    Radio.RxBoosted(0);
 }
 
 void onWakeUp() {
@@ -58,8 +61,8 @@ void setup() {
 
     boardInitMcu();
 
-//    pinMode(Vext, OUTPUT);
-//    digitalWrite(Vext, LOW); // 3.3V // --> Meshtastic on this pin
+    pinMode(Vext, OUTPUT);
+    digitalWrite(Vext, LOW); // 3.3V
 
     Serial.begin(115200);
 #ifdef USE_SOFT_SERIAL
@@ -70,12 +73,12 @@ void setup() {
 
     Log.begin(LOG_LEVEL, &Serial);
 
-    systemControl.begin(&radioEvents);
-
 #ifndef USE_SCREEN
     // To catch Serial in dev
     delay(2000);
 #endif
+
+    systemControl.begin(&radioEvents);
 }
 
 void loop() {

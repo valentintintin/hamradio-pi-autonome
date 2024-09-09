@@ -84,17 +84,17 @@ public class SerialMessageService(ILogger<SerialMessageService> logger) : AServi
 
     public void SetWifi(bool enabled)
     {
-        SendCommand($"wifi {(enabled ? "1" : "0")}");
+        SendCommand($"relay1 {(enabled ? "1" : "0")}");
     }
 
     public void SetNpr(bool enabled)
     {
-        SendCommand($"npr {(enabled ? "1" : "0")}");
+        SendCommand($"relay2 {(enabled ? "1" : "0")}");
     }
 
     public void SetMeshtastic(bool enabled)
     {
-        SendCommand($"msh {(enabled ? "1" : "0")}");
+        SetWifi(enabled);
     }
 
     public void SendTelemetry()

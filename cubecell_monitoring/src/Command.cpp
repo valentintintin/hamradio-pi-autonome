@@ -10,13 +10,12 @@ System* Command::system;
 Command::Command(System *system) {
     Command::system = system;
 
-    parser.registerCommand(PSTR("wifi"), PSTR("u"), doWifi);
-    parser.registerCommand(PSTR("npr"), PSTR("u"), doNpr);
-    parser.registerCommand(PSTR("msh"), PSTR("u"), doMeshtastic);
+    parser.registerCommand(PSTR("relay1"), PSTR("u"), doRelay1);
+    parser.registerCommand(PSTR("relay2"), PSTR("u"), doRelay2);
     parser.registerCommand(PSTR("position"), PSTR(""), doPosition);
     parser.registerCommand(PSTR("telem"), PSTR(""), doTelemetry);
     parser.registerCommand(PSTR("telemParams"), PSTR(""), doTelemetryParams);
-    parser.registerCommand(PSTR("dog"), PSTR("u"), doWatchdog);
+    parser.registerCommand(PSTR("dog"), PSTR("u"), doMpptWatchdog);
     parser.registerCommand(PSTR("pow"), PSTR("uu"), doMpptPower);
     parser.registerCommand(PSTR("lora"), PSTR("s"), doLora);
     parser.registerCommand(PSTR("reset"), PSTR(""), doReset);
@@ -24,6 +23,7 @@ Command::Command(System *system) {
     parser.registerCommand(PSTR("time"), PSTR("u"), doSetTime);
     parser.registerCommand(PSTR("sleep"), PSTR("u"), doSleep);
     parser.registerCommand(PSTR("jsons"), PSTR(""), doGetJson);
+    parser.registerCommand(PSTR("ping"), PSTR(""), doPing);
 }
 
 bool Command::processCommand(const char *command) {
@@ -43,26 +43,18 @@ bool Command::processCommand(const char *command) {
     return true;
 }
 
-void Command::doWifi(MyCommandParser::Argument *args, char *response) {
+void Command::doRelay1(MyCommandParser::Argument *args, char *response) {
     bool state = args[0].asInt64 > 0;
 
-    system->gpio.setWifi(state);
+    system->gpio.setRelay1(state);
 
     sprintf_P(response, PSTR("OK state %d"), state);
 }
 
-void Command::doNpr(MyCommandParser::Argument *args, char *response) {
+void Command::doRelay2(MyCommandParser::Argument *args, char *response) {
     bool state = args[0].asInt64 > 0;
 
-    system->gpio.setNpr(state);
-
-    sprintf_P(response, PSTR("OK state %d"), state);
-}
-
-void Command::doMeshtastic(MyCommandParser::Argument *args, char *response) {
-    bool state = args[0].asInt64 > 0;
-
-    system->gpio.setMeshtastic(state);
+    system->gpio.setRelay2(state);
 
     sprintf_P(response, PSTR("OK state %d"), state);
 }
@@ -86,7 +78,7 @@ void Command::doTelemetryParams(MyCommandParser::Argument *args, char *response)
     sprintf_P(response, PSTR("OK"));
 }
 
-void Command::doWatchdog(MyCommandParser::Argument *args, char *response) {
+void Command::doMpptWatchdog(MyCommandParser::Argument *args, char *response) {
     uint64_t watchdog = args[0].asUInt64;
 
     bool ok = system->mpptMonitor.setWatchdog(watchdog);
@@ -124,12 +116,6 @@ void Command::doSetEeprom(MyCommandParser::Argument *args, char *response) {
 
     system->setFunctionAllowed(function, allowed);
 
-    if (function == EEPROM_ADDRESS_WATCHDOG_SAFETY && allowed) {
-        system->mpptMonitor.resetWatchdogSafety();
-    } else if (function == EEPROM_ADDRESS_RESET_ON_ERROR) {
-        system->nbError = 0;
-    }
-
     sprintf_P(response, EEPROM.read((int const) args[0].asUInt64) ? PSTR("OK") : PSTR("KO"));
 }
 
@@ -157,4 +143,8 @@ void Command::doSleep(MyCommandParser::Argument *args, char *response) {
 void Command::doGetJson(MyCommandParser::Argument *args, char *response) {
     system->resetTimerJson();
     sprintf_P(response, PSTR("OK"));
+}
+
+void Command::doPing(MyCommandParser::Argument *args, char *response) {
+    sprintf_P(response, PSTR("Pong!"));
 }

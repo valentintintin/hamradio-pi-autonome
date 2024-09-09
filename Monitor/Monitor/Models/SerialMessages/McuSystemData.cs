@@ -19,11 +19,11 @@ public class McuSystemData : Message
     [JsonPropertyName("nbError")] 
     public int NbError { get; set; }
 
-    [JsonPropertyName("watchdogSafetyTimer")]
-    public long WatchdogSafetyTimer { get; set; }
+    [JsonPropertyName("mpptWatchdogSafetyTimer")]
+    public long MpptWatchdogSafetyTimer { get; set; }
 
-    [JsonPropertyName("watchdogSafety")]
-    public bool WatchdogSafetyEnabled { get; set; }
+    [JsonPropertyName("mpptWatchdogSafety")]
+    public bool MpptWatchdogSafetyEnabled { get; set; }
 
     [JsonPropertyName("aprsDigipeater")]
     public bool AprsDigipeaterEnabled { get; set; }
@@ -39,6 +39,15 @@ public class McuSystemData : Message
 
     [JsonPropertyName("resetError")]
     public bool ResetError { get; set; }
+
+    [JsonPropertyName("watchdog")]
+    public bool Watchdog { get; set; }
+
+    [JsonPropertyName("watchdogLoraTx")]
+    public bool WatchdogLoraTx { get; set; }
+
+    [JsonPropertyName("watchdogLoraTxTimer")]
+    public long WatchdogLoraTxTimer { get; set; }
 
     [JsonPropertyName("temperatureRtc")]
     public float TemperatureRtc { get; set; }

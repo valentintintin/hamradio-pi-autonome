@@ -58,7 +58,9 @@
             .Merge(EntitiesManagerService.Entities.FeatureResetOnErrorEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureAprsPositionEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.ValueChanges())
-            .Merge(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.FeatureMpptWatchdogSafetyEnabled.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.FeatureWatchdogEnabled.ValueChanges())
+            .Merge(EntitiesManagerService.Entities.FeatureWatchdogLoraTxEnabled.ValueChanges())
             .Merge(EntitiesManagerService.Entities.WatchdogEnabled.ValueChanges())
             .SubscribeAsync(Notify);
         

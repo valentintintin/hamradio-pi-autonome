@@ -4,13 +4,13 @@ namespace Monitor.Models.SerialMessages;
 
 public class GpioData : Message
 {
-    [JsonPropertyName("wifi")]
+    // [JsonPropertyName("relay1")]
     public bool Wifi { get; set; }
     
-    [JsonPropertyName("npr")]
+    [JsonPropertyName("relay2")]
     public bool Npr { get; set; }
     
-    [JsonPropertyName("msh")]
+    [JsonPropertyName("relay1")]
     public bool Meshtastic { get; set; }
     
     [JsonPropertyName("ldr")]

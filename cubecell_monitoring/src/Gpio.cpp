@@ -5,9 +5,8 @@
 #include "System.h"
 
 Gpio::Gpio(System *system) : system(system) {
-    setWifi(wifi);
-    setNpr(npr);
-    setMeshtastic(meshtastic);
+    setRelay1(relay1);
+    setRelay2(relay2);
     initialized = true;
 }
 
@@ -29,25 +28,21 @@ void Gpio::setState(uint8_t pin, bool enabled, const char* name, bool &status, b
     }
 }
 
-void Gpio::setWifi(bool enabled) {
-    setState(PIN_WIFI, enabled, PSTR("WIFI"), wifi, true);
+void Gpio::setRelay1(bool enabled) {
+    setState(PIN_RELAY_1, enabled, PSTR("Relay 1"), relay1, true);
 }
 
-void Gpio::setNpr(bool enabled) {
-    if (npr != enabled) {
+void Gpio::setRelay2(bool enabled) {
+    if (relay2 != enabled) {
         system->forceSendTelemetry = true;
     }
 
-    setState(PIN_NPR, enabled, PSTR("NPR"), npr, true);
+    setState(PIN_RELAY_2, enabled, PSTR("Relay 2"), relay2, true);
 }
 
 uint16_t Gpio::getLdr() const {
 //    return getAdcState(PIN_LDR, PSTR("LDR"));
     return getState(PIN_LDR, PSTR("LDR")) ? 0 : LDR_ALARM_LEVEL;
-}
-
-void Gpio::setMeshtastic(bool enabled) {
-    setState(PIN_MESHTASTIC, enabled, PSTR("MESH"), meshtastic);
 }
 
 bool Gpio::getState(uint8_t pin, const char* name) const {
@@ -61,14 +56,13 @@ uint16_t Gpio::getAdcState(uint8_t pin, const char *name) const {
 }
 
 void Gpio::printJson() const {
-    Log.infoln(F("[GPIO] Wifi: %T NPR: %T Msh: %T Box LDR: %d"), isWifiEnabled(), isNprEnabled(), isMeshtasticEnabled(), getLdr());
+    Log.infoln(F("[GPIO] Relay 1: %T Relay 2: %T Box LDR: %d"), isRelay1Enabled(), isRelay2Enabled(), getLdr());
 
     serialJsonWriter
             .beginObject()
             .property(F("type"), PSTR("gpio"))
-            .property(F("wifi"), isWifiEnabled())
-            .property(F("npr"), isNprEnabled())
-            .property(F("msh"), isMeshtasticEnabled())
+            .property(F("relay1"), isRelay1Enabled())
+            .property(F("relay2"), isRelay2Enabled())
             .property(F("ldr"), getLdr())
             .endObject(); SerialPi->println();
 }

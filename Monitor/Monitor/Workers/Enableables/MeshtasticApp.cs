@@ -29,9 +29,11 @@ public class MeshtasticApp : AEnabledWorker
     private readonly int _currentYear;
     private readonly TimeSpan _intervalTelemetryEnvironment, _intervalTelemetryPowerMetric, _intervalPosition;
     private readonly TimeSpan _intervalBbsReminder;
+    private readonly TimeSpan _checkConnectionInterval;
     private readonly DataContext _context;
-    
-    private SerialConnection? _deviceConnection;
+    private readonly SerialConnection _deviceConnection;
+
+    private DateTime? _lastSerialReceived;
 
     public MeshtasticApp(ILogger<MeshtasticApp> logger, IServiceProvider serviceProvider,
         IConfiguration configuration, SerialMessageService serialMessageService, 
@@ -41,8 +43,8 @@ public class MeshtasticApp : AEnabledWorker
         _monitorService = monitorService;
         _context = contextFactory.CreateDbContext();
         
-        RetryDuration = TimeSpan.FromSeconds(30);
-
+        _checkConnectionInterval = TimeSpan.FromMinutes(5);
+        
         _currentYear = configuration.GetValueOrThrow<int>("CurrentYear");
         
         var configurationSection = configuration.GetSection("Meshtastic");
@@ -63,11 +65,12 @@ public class MeshtasticApp : AEnabledWorker
         var bbsSection = configurationSection.GetSection("Bbs");
         _bbsEnabled = bbsSection.GetValue("Enabled", false);
         _intervalBbsReminder = TimeSpan.FromHours(configurationSection.GetValue("ReminderInterval", 1));
+        
+        _deviceConnection = new SerialConnection(Logger, _path, _speed);
     }
 
     protected override async Task Start(CancellationToken cancellationToken)
     {   
-        _deviceConnection = new SerialConnection(Logger, _path, _speed);
         await _deviceConnection.Start();
 
         if (_intervalPosition.TotalSeconds > 0)
@@ -91,6 +94,20 @@ public class MeshtasticApp : AEnabledWorker
             );
         }
 
+        AddDisposable(
+            // ReSharper disable once AsyncVoidLambda
+            Scheduler.SchedulePeriodic(_checkConnectionInterval, async () =>
+            {
+                if (!_lastSerialReceived.HasValue || DateTime.UtcNow - _lastSerialReceived >= _checkConnectionInterval)
+                {
+                    Logger.LogWarning("No Serial received from Meshtastic so reload Worker");
+
+                    await Stop();
+                    await Start(cancellationToken);
+                }
+            })
+        );
+
         _deviceConnection.MessageRecieved += PacketReceived;
     }
 
@@ -110,8 +127,8 @@ public class MeshtasticApp : AEnabledWorker
 
     private void PacketReceived(object? sender, MessageRecievedEventArgs e)
     {
-        _deviceConnection ??= (SerialConnection?) sender;
-
+        _lastSerialReceived = DateTime.UtcNow;
+        
         Logger.LogDebug("Meshtastic serial port receive {packet} and payload {payload}", JsonSerializer.Serialize(e.Message), e.Message.GetPayload());
 
         var myNodeNum = e.DeviceStateContainer.MyNodeInfo.MyNodeNum;
@@ -531,10 +548,10 @@ public class MeshtasticApp : AEnabledWorker
         _monitorService.AddLoRaMeshtasticMessage(packetRoRadio.Packet, _deviceConnection.DeviceStateContainer.GetNodeDisplayName(_deviceConnection.DeviceStateContainer.MyNodeInfo.MyNodeNum), true);
     }
 
-    public override ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
-        _deviceConnection?.Disconnect();
-        return base.DisposeAsync();
+        await Stop();
+        GC.SuppressFinalize(this);
     }
     
     private uint GetHopLimitForResponse(uint hopStart, uint hopLimit)

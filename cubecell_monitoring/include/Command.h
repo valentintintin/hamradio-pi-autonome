@@ -18,11 +18,9 @@ private:
     MyCommandParser parser;
     char response[MyCommandParser::MAX_RESPONSE_SIZE]{};
 
-    static void doWifi(MyCommandParser::Argument *args, char *response);
+    static void doRelay1(MyCommandParser::Argument *args, char *response);
 
-    static void doNpr(MyCommandParser::Argument *args, char *response);
-
-    static void doMeshtastic(MyCommandParser::Argument *args, char *response);
+    static void doRelay2(MyCommandParser::Argument *args, char *response);
 
     static void doPosition(MyCommandParser::Argument *args, char *response);
 
@@ -30,7 +28,7 @@ private:
 
     static void doTelemetryParams(MyCommandParser::Argument *args, char *response);
 
-    static void doWatchdog(MyCommandParser::Argument *args, char *response);
+    static void doMpptWatchdog(MyCommandParser::Argument *args, char *response);
 
     static void doMpptPower(MyCommandParser::Argument *args, char *response);
 
@@ -45,6 +43,8 @@ private:
     static void doSleep(MyCommandParser::Argument *args, char *response);
 
     static void doGetJson(MyCommandParser::Argument *args, char *response);
+
+    static void doPing(MyCommandParser::Argument *args, char *response);
 };
 
 #endif //CUBECELL_MONITORING_COMMAND_H

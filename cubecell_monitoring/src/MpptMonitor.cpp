@@ -203,7 +203,7 @@ bool MpptMonitor::update(bool force) {
 
     timer.restart();
 
-    if (system->isFunctionAllowed(EEPROM_ADDRESS_WATCHDOG_SAFETY)) {
+    if (system->isFunctionAllowed(EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY)) {
         doWatchdogSafety();
     }
 
@@ -267,7 +267,7 @@ bool MpptMonitor::setWatchdog(uint16_t powerOffTime, uint8_t timeoutTime) {
     useWatchdogSafety = !watchdogEnabled;
     timerWatchdogSafety.restart();
 
-    sprintf_P(bufferText, PSTR("[MPPT_WATCHDOG] Watchdog state : %d. PowerOff : %d, Counter : %d, TimerSafety : %ls"), enabled, powerOffTime, WATCHDOG_TIMEOUT, timerWatchdogSafety.getTimeLeft());
+    sprintf_P(bufferText, PSTR("[MPPT_WATCHDOG] Watchdog state : %d. PowerOff : %d, Counter : %d, TimerSafety : %ls"), enabled, powerOffTime, MPPT_WATCHDOG_TIMEOUT, timerWatchdogSafety.getTimeLeft());
     Log.infoln(bufferText);
     system->displayText(PSTR("WatchDog"), bufferText, 3000);
 

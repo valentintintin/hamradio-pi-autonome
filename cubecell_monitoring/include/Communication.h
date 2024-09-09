@@ -5,6 +5,7 @@
 #include "../lib/Aprs/Aprs.h"
 
 #include "Config.h"
+#include "Timer.h"
 
 class System;
 
@@ -17,11 +18,21 @@ public:
     void sent();
     void received(uint8_t * payload, uint16_t size, int16_t rssi, int8_t snr);
 
-    void sendMessage(const char* destination, const char* message, const char* ackToConfirm = nullptr);
-    void sendPosition(const char* comment);
-    void sendStatus(const char* comment);
-    void sendTelemetry();
-    void sendTelemetryParams();
+    bool sendMessage(const char* destination, const char* message, const char* ackToConfirm = nullptr);
+    bool sendPosition(const char* comment);
+    bool sendStatus(const char* comment);
+    bool sendTelemetry();
+    bool sendTelemetryParams();
+
+    inline unsigned long getWatchdogLoraTxTimeLeft() const {
+        return timerLoraTxWatchdog.getTimeLeft();
+    }
+
+    inline bool hasWatchdogLoraTxExpired() const {
+        return timerLoraTxWatchdog.hasExpired();
+    }
+
+    void resetWatchdogLoraTx();
 
     bool shouldSendTelemetryParams = false;
 private:
@@ -31,8 +42,9 @@ private:
     AprsPacket aprsPacketTx;
     AprsPacketLite aprsPacketRx;
     uint16_t telemetrySequenceNumber = 0;
+    Timer timerLoraTxWatchdog = Timer(TIME_LORA_TX_WATCHDOG);
 
-    void send();
+    bool send();
 };
 
 #endif //CUBECELL_MONITORING_COMMUNICATION_H

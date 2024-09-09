@@ -12,30 +12,24 @@ public:
 
     void printJson() const;
 
-    void setWifi(bool enabled);
-    void setNpr(bool enabled);
-    void setMeshtastic(bool enabled);
+    void setRelay1(bool enabled);
+    void setRelay2(bool enabled);
 
     uint16_t getLdr() const;
 
-    inline bool isWifiEnabled() const {
-        return wifi;
+    inline bool isRelay1Enabled() const {
+        return relay1;
     }
 
-    inline bool isNprEnabled() const {
-        return npr;
-    }
-
-    inline bool isMeshtasticEnabled() const {
-        return meshtastic;
+    inline bool isRelay2Enabled() const {
+        return relay2;
     }
 private:
     System *system;
     bool initialized = false;
 
-    bool wifi = WIFI_INITIAL_STATE;
-    bool npr = false;
-    bool meshtastic = MESHTASTIC_INITIAL_STATE;
+    bool relay1 = RELAY_1_INITIAL_STATE;
+    bool relay2 = RELAY_2_INITIAL_STATE;
 
     void setState(uint8_t pin, bool enabled, const char* name, bool &status, bool inverted = false);
     bool getState(uint8_t pin, const char* name) const;

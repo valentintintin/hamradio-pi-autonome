@@ -27,7 +27,6 @@ public:
 
     bool begin(RadioEvents_t *radioEvents);
     void update();
-    void setTimeFromRTcToInternalRtc(uint64_t epoch);
     bool isBoxOpened() const;
     void setFunctionAllowed(byte function, bool allowed);
     void sleep(uint64_t time);
@@ -44,6 +43,8 @@ public:
     void addError();
     void removeOneError();
 
+    static void delayWdt(uint32_t milliseconds);
+    static void setTimeFromRTcToInternalRtc(uint64_t epoch);
     static DateTime nowToString(char *result);
 
     Communication *communication{};
@@ -67,8 +68,10 @@ private:
         EEPROM_ADDRESS_APRS_POSITION
         EEPROM_ADDRESS_SLEEP
         EEPROM_ADDRESS_RESET_ON_ERROR
+        EEPROM_ADDRESS_WATCHDOG
+        EEPROM_ADDRESS_WATCHDOG_LORA_TX
      */
-    bool functionsAllowed[6] = {false, true, true, true, false, false};
+    bool functionsAllowed[8] = {false, true, true, true, false, false, false, true};
 
     Timer timerStatus = Timer(INTERVAL_STATUS_APRS, false);
     Timer timerPosition = Timer(INTERVAL_POSITION_AND_WEATHER_APRS, true);
@@ -76,7 +79,7 @@ private:
     Timer timerState = Timer(INTERVAL_STATE, true);
     Timer timerScreen = Timer(TIME_SCREEN_ON);
     Timer timerBoxOpened = Timer(INTERVAL_ALARM_BOX_OPENED_APRS, true);
-    Timer timerSecond = Timer(1000, true);
+    Timer timerBlinker = Timer(5000, true);
 
     CubeCell_NeoPixel *pixels;
 #ifdef USE_SCREEN

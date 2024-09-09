@@ -42,7 +42,9 @@ public class MonitorService(
                 
                 EntitiesManagerService.Entities.McuStatus.SetValue($"{systemData.State} {(systemData.NbError > 0 ? $"({systemData.NbError} errors)" : "")}", true);
                 EntitiesManagerService.Entities.StatusBoxOpened.SetValue(systemData.BoxOpened, true);
-                EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.SetValue(systemData.WatchdogSafetyEnabled, true);
+                EntitiesManagerService.Entities.FeatureMpptWatchdogSafetyEnabled.SetValue(systemData.MpptWatchdogSafetyEnabled, true);
+                EntitiesManagerService.Entities.FeatureWatchdogEnabled.SetValue(systemData.Watchdog, true);
+                EntitiesManagerService.Entities.FeatureWatchdogLoraTxEnabled.SetValue(systemData.WatchdogLoraTx, true);
                 EntitiesManagerService.Entities.FeatureAprsDigipeaterEnabled.SetValue(systemData.AprsDigipeaterEnabled, true);
                 EntitiesManagerService.Entities.FeatureAprsTelemetryEnabled.SetValue(systemData.AprsTelemetryEnabled, true);
                 EntitiesManagerService.Entities.FeatureAprsPositionEnabled.SetValue(systemData.AprsPositionEnabled, true);

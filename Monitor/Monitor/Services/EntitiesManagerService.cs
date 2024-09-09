@@ -164,7 +164,9 @@ public record MqttEntities
     public ConfigEntity<float> TemperatureRtc { get; } = new("mcu/temperature_rtc", false, default, true);
     public ConfigEntity<TimeSpan> McuUptime { get; } = new("mcu/uptime", false, default, true);
     
-    public ConfigEntity<bool> FeatureWatchdogSafetyEnabled { get; } = new("feature/watchdog_safety", true, false, false, true);
+    public ConfigEntity<bool> FeatureMpptWatchdogSafetyEnabled { get; } = new("feature/mppt_watchdog_safety", true, false, false, true);
+    public ConfigEntity<bool> FeatureWatchdogEnabled { get; } = new("feature/watchdog", true, false, false, true);
+    public ConfigEntity<bool> FeatureWatchdogLoraTxEnabled { get; } = new("feature/watchdog_lora_tx", true, false, false, true);
     public ConfigEntity<bool> FeatureAprsDigipeaterEnabled { get; } = new("feature/aprs_digipeater", true, true, false, true);
     public ConfigEntity<bool> FeatureAprsTelemetryEnabled { get; } = new("feature/aprs_telemetry", true, true, false, true);
     public ConfigEntity<bool> FeatureAprsPositionEnabled { get; } = new("feature/aprs_position", true, true, false, true);

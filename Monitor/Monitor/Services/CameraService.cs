@@ -16,7 +16,7 @@ public class CameraService : AService
     private readonly string _storagePath;
     private readonly string? _message;
     private readonly List<FswebcamParameters> _fswebcamParameters;
-    private readonly int _frameToTakeDuringNight = 25;
+    private readonly int _frameToTakeDuringNight;
 
     private readonly string _fontPath = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, "Arial.ttf");
 
@@ -32,7 +32,7 @@ public class CameraService : AService
         var configurationSection = configuration.GetSection("Cameras");
         _message = configurationSection.GetValue<string?>("Message");
         _fswebcamParameters = configurationSection.GetSection("Devices").Get<List<FswebcamParameters>>()?.ToList() ?? [];
-        _frameToTakeDuringNight = configurationSection.GetValue("FrameToTakeDuringNight", 25);
+        _frameToTakeDuringNight = configurationSection.GetValue("FrameToTakeDuringNight", 1);
         
         _storagePath = Path.Combine(
             configuration.GetValueOrThrow<string>("StoragePath"), 

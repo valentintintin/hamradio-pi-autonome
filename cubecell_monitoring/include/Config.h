@@ -5,6 +5,7 @@
 #include <JsonWriter.h>
 
 #define LOG_LEVEL LOG_LEVEL_TRACE
+#define BUFFER_LENGTH 512
 
 //#define USE_SCREEN
 #define USE_SOFT_SERIAL
@@ -27,17 +28,17 @@
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 #define TX_OUTPUT_POWER 22
-#define TRX_BUFFER 210
+#define TRX_BUFFER 253 // 256 - 3 because 3 bytes for LoRa APRS
 
 #define INTERVAL_TELEMETRY_APRS 300000 // 5 minutes
 #define INTERVAL_POSITION_AND_WEATHER_APRS 900000 // 15 minutes
-#define INTERVAL_STATUS_APRS 3600000 // 60 minutes
-#define INTERVAL_ALARM_BOX_OPENED_APRS 300000 // 2 minutes
+#define INTERVAL_STATUS_APRS 3600000 // 1 hour
+#define INTERVAL_ALARM_BOX_OPENED_APRS 300000 // 5 minutes
 
 #define INTERVAL_WEATHER 30000 // 30 secondes
 #define INTERVAL_MPPT 30000 // 30 secondes
 #define INTERVAL_STATE 30000 // 30 secondes
-#define TIME_PAUSE_SCREEN 1500 // 1.5 secondes
+#define TIME_PAUSE_SCREEN 1500 // 1.5 seconds
 #define TIME_SCREEN_ON 30000 // 30 secondes
 
 #define APRS_CALLSIGN "F4HVV-15"
@@ -51,41 +52,44 @@
 #define APRS_COMMENT "Digi, Meteo"
 #define APRS_STATUS "f4hvv.valentin-saugnier.fr"
 
-#define PIN_WIFI GPIO0
-#define PIN_NPR GPIO5
+#define PIN_RELAY_1 GPIO0
+#define PIN_RELAY_2 GPIO5
 #define PIN_LDR GPIO3
-#define PIN_MESHTASTIC GPIO6
 
-#define WIFI_INITIAL_STATE false
-#define MESHTASTIC_INITIAL_STATE true
+#define RELAY_1_INITIAL_STATE false
+#define RELAY_2_INITIAL_STATE false
 
 #ifdef USE_SOFT_SERIAL
 #define PIN_PI_RX GPIO2
 #define PIN_PI_TX GPIO1
 #endif
 
-#define WATCHDOG_TIMEOUT 255
-#define WATCHDOG_SAFETY_RESET 60000 // 1 minute
+#define MPPT_WATCHDOG_TIMEOUT 255
+#define MPPT_WATCHDOG_SAFETY_RESET 60000 // 1 minute
 #define LDR_ALARM_LEVEL 1000
 #define VOLTAGE_TO_SLEEP 11000
 #define DURATION_TO_WAIT_BEFORE_SLEEP 120000 // 2 minutes
 #define SLEEP_DURATION 3600000 // 60 minutes
 #define MAX_ERROR_TO_RESET 10
+#define TIME_LORA_TX_WATCHDOG 600000 // 10 minutes
 #define CURRENT_YEAR 2024
 
-#define EEPROM_ADDRESS_WATCHDOG_SAFETY 0
+#define EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY 0
 #define EEPROM_ADDRESS_APRS_DIGIPEATER 1
 #define EEPROM_ADDRESS_APRS_TELEMETRY 2
 #define EEPROM_ADDRESS_APRS_POSITION 3
 #define EEPROM_ADDRESS_SLEEP 4
 #define EEPROM_ADDRESS_RESET_ON_ERROR 5
+#define EEPROM_ADDRESS_WATCHDOG 6
+#define EEPROM_ADDRESS_WATCHDOG_LORA_TX 7
 #define EEPROM_ADDRESS_VERSION 0xFF
-#define EEPROM_VERSION 3
+#define EEPROM_VERSION 4
 
 #define COLOR_RED 0x500000
 #define COLOR_VIOLET 0x500050
 #define COLOR_BLUE 0x000050
 #define COLOR_YELLOW 0xcfcf02
+#define COLOR_ORANGE 0xa88d32
 #define COLOR_GREEN 0x005000
 #define COLOR_CYAN 0x00bbff
 
@@ -96,6 +100,6 @@ extern softSerial *SerialPi;
 extern HardwareSerial *SerialPi;
 #endif
 extern JsonWriter serialJsonWriter;
-extern char bufferText[255];
+extern char bufferText[BUFFER_LENGTH];
 
 #endif //CUBECELL_MONITORING_CONFIG_H

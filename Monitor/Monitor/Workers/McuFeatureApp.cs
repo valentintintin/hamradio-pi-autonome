@@ -15,7 +15,7 @@ public class McuFeatureApp : AWorker
 
     protected override Task Start(CancellationToken cancellationToken)
     {
-        AddDisposable(EntitiesManagerService.Entities.FeatureWatchdogSafetyEnabled.ValueToChange()
+        AddDisposable(EntitiesManagerService.Entities.FeatureMpptWatchdogSafetyEnabled.ValueToChange()
             .Do(v => Logger.LogDebug("Watchdog Safety => {value}", v))
             .Select(v => v.valueToChange)
             .Subscribe(_serialMessageService.SetWatchdogSafety)

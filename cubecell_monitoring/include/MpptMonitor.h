@@ -12,7 +12,7 @@ public:
 
     bool begin();
     bool update(bool force = false);
-    bool setWatchdog(uint16_t powerOffTime, uint8_t timeoutTime = WATCHDOG_TIMEOUT);
+    bool setWatchdog(uint16_t powerOffTime, uint8_t timeoutTime = MPPT_WATCHDOG_TIMEOUT);
     bool setPowerOnOff(uint16_t powerOnVoltage, uint16_t powerOffVoltage);
     void resetWatchdogSafety();
 
@@ -80,7 +80,7 @@ private:
     TwoWire &wire;
     mpptChg charger;
     Timer timer = Timer(INTERVAL_MPPT, true);
-    Timer timerWatchdogSafety = Timer(WATCHDOG_SAFETY_RESET);
+    Timer timerWatchdogSafety = Timer(MPPT_WATCHDOG_SAFETY_RESET);
 
     bool init = false, night = false, alert = false, watchdogEnabled = false, powerEnabled = false;
     uint8_t watchdogCounter = 0;
