@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <ThreadController.h>
+#include <DS3231.h>
 
 #include "Communication.h"
 #include "Timer.h"
@@ -57,6 +58,10 @@ public:
 #ifdef USE_WATCHDOG_LINUX_BOARD
     WatchdogMasterPin *watchdogLinuxBoard;
     GpioPin gpioLinuxBoard = GpioPin(LINUX_BOARD_PIN);
+#endif
+
+#ifdef USE_RTC
+    DS3231 rtc;
 #endif
 private:
     ThreadController threadController;

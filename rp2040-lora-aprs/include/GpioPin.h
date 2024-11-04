@@ -16,6 +16,7 @@ public:
 private:
     pin_size_t pin;
     PinMode mode;
+    bool currentState;
     bool inverted;
     bool isAdc;
 };

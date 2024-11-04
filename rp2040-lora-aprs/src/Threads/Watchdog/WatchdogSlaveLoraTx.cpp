@@ -8,6 +8,10 @@ WatchdogSlaveLoraTx::WatchdogSlaveLoraTx(System *system) : WatchdogThread(system
 }
 
 bool WatchdogSlaveLoraTx::runOnce() {
+    if (millis() < WATCHDOG_TIME_AFTER_BOOT) {
+        return true;
+    }
+
     if (hasTx) {
         hasTx = false;
         Log.traceln(F("[WATCHDOG_LORA_TX] Dog fed"));

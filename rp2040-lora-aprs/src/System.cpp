@@ -1,3 +1,4 @@
+#include <hardware/rtc.h>
 #include "ArduinoLog.h"
 #include "System.h"
 
@@ -16,16 +17,15 @@
 
 #ifdef USE_I2C_SLAVE
 #include "I2CSlave.h"
+#include "utils.h"
+#include "PicoSleep.h"
+
 #endif
 
 System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(this), communication(this),
                    watchdogSlaveLoraTx(this), sendPositionThread(this), sendStatusThread(this),
                    sendTelemetriesThread(this) {
     threadController.add(new BlinkerThread(this, &gpioLed));
-    threadController.add(&watchdogSlaveLoraTx);
-    threadController.add(&sendPositionThread);
-    threadController.add(&sendStatusThread);
-    threadController.add(&sendTelemetriesThread);
 
 #ifdef USE_MPPTCHG
     energyThread = new EnergyMpptChg(this);
@@ -42,6 +42,15 @@ System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(t
     threadController.add(&weatherThread);
 #endif
 
+#ifdef USE_LDR_BOX_OPENED
+    threadController.add(new LdrBoxOpenedThread(this, new GpioPin(LDR_BOX_OPENED_PIN, INPUT)));
+#endif
+
+    threadController.add(&watchdogSlaveLoraTx);
+    threadController.add(&sendPositionThread);
+    threadController.add(&sendStatusThread);
+    threadController.add(&sendTelemetriesThread);
+
 #ifdef USE_MPPTCHG_WATCHDOG
     watchdogSlaveMpptChg = new WatchdogSlaveMpptChg(this);
     threadController.add(watchdogSlaveMpptChg);
@@ -50,10 +59,6 @@ System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(t
 #ifdef USE_WATCHDOG_MESHTASTIC
     watchdogMeshtastic = new WatchdogMasterPin(this, &gpioMeshtastic, WATCHDOG_MESHTASTIC_TIMEOUT);
     threadController.add(watchdogMeshtastic);
-#endif
-
-#ifdef USE_LDR_BOX_OPENED
-    threadController.add(new LdrBoxOpenedThread(this, new GpioPin(LDR_BOX_OPENED_PIN, INPUT)));
 #endif
 
 #ifdef USE_WATCHDOG_LINUX_BOARD
@@ -65,30 +70,56 @@ System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(t
 bool System::begin() {
     Log.infoln(F("[SYSTEM] Starting"));
 
+    ledBlink();
+
     gpioLed.setState(HIGH);
 
-    SPI1.setSCK(LORA_SCK);
-    SPI1.setTX(LORA_MOSI);
-    SPI1.setRX(LORA_MISO);
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    SPI1.begin(false);
+    if (watchdog_caused_reboot()) {
+        Log.warningln(F("[SYSTEM] Watchdog caused reboot"));
+    }
 
-    communication.begin();
-    weatherThread.begin();
-    energyThread->begin();
+    rtc_init();
+    Wire.begin();
 
-#ifdef USE_MPPTCHG_WATCHDOG
-    watchdogSlaveMpptChg->begin();
+#ifdef USE_WATCHDOG
+    rp2040.wdt_begin(8300);
+    Log.infoln(F("[SYSTEM] Internal watchdog enabled"));
 #endif
 
 #ifdef USE_I2C_SLAVE
     I2CSlave::begin(this);
 #endif
 
-    Log.infoln(F("[SYSTEM] Started"));
+#ifdef USE_MESHTASTIC
+    gpioMeshtastic.setState(true);
+#endif
+
+#ifdef USE_RTC
+    auto epoch = RTClib::now().unixtime();
+    datetime_t datetime;
+    epoch_to_datetime(epoch, &datetime);
+    rtc_set_datetime(&datetime);
+    Log.infoln(F("[SYSTEM] Set internal RTC to date %d/%d/%d %d:%d:%d"), datetime.day, datetime.month, datetime.year, datetime.hour, datetime.min, datetime.sec);
+#endif
+
+    communication.begin();
+
+    for(int i = 0; i < MAX_THREADS ; i++) {
+        auto thread = (MyThread*) threadController.get(i);
+        if (thread != nullptr) {
+            if (!thread->begin()) {
+                Log.errorln(F("[SYSTEM] Thread init KO"));
+                ledBlink(10);
+                continue;
+            }
+
+            thread->run();
+        }
+    }
 
     gpioLed.setState(LOW);
+
+    Log.infoln(F("[SYSTEM] Started"));
 
     return true;
 }
@@ -98,7 +129,7 @@ void System::loop() {
 
     if (Serial.available()) {
         streamReceived = &Serial;
-        Log.verboseln(F("Serial USB incoming"));
+        Log.traceln(F("Serial USB incoming"));
     }
 
     if (streamReceived != nullptr) {
@@ -115,4 +146,6 @@ void System::loop() {
     }
 
     delay(10);
+
+    rp2040.wdt_reset();
 }

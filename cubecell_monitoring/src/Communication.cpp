@@ -21,45 +21,10 @@ Communication::Communication(System *system) : system(system) {
     aprsPacketTx.weather.usePressure = true;
 
 //    strcpy_P(aprsPacketTx.weather.device, PSTR("4HVV"));
-
-    strcpy_P(aprsPacketTx.telemetries.projectName, PSTR("Data"));
-
-    // Voltage battery between 0 and 15000mV
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[0].name, PSTR("VBat")); // 7
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[0].unit, PSTR("V"));
-    aprsPacketTx.telemetries.telemetriesAnalog[0].equation.b = 0.001;
-
-    // Current charge between 0mA and 2000mA
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[1].name, PSTR("IBat")); // 6
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[1].unit, PSTR("mA"));
-
-    // Voltage battery between 0 and 30000mV
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[2].name, PSTR("VSol")); // 5
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[2].unit, PSTR("V"));
-    aprsPacketTx.telemetries.telemetriesAnalog[2].equation.b = 0.001;
-
-    // Current charge between 0mA and 2000mA
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[3].name, PSTR("ISol")); // 5
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[3].unit, PSTR("mA"));
-
-    // Watchdog poweroff in seconds
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[4].name, PSTR("Slep")); // 4
-    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[4].unit, PSTR("min"));
-    aprsPacketTx.telemetries.telemetriesAnalog[4].equation.b = 0.0166;
-
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[0].name, PSTR("Night"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[1].name, PSTR("Alrt"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[2].name, PSTR("WDog"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[3].name, PSTR("5V"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[4].name, PSTR("Box"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[5].name, PSTR("R1"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[6].name, PSTR("R2"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[7].name, PSTR("Err"));
 }
 
 bool Communication::begin(RadioEvents_t *radioEvents) {
     if (Radio.Init(radioEvents)) {
-        system->displayText(PSTR("LoRa error"), PSTR("Init failed"));
         system->serialError(PSTR("[RADIO] Init error"));
 
         return false;
@@ -115,7 +80,6 @@ bool Communication::send() {
 
     if (rxTry == 5) {
         system->serialError(PSTR("[LORA_TX] Radio busy after retries, abort TX"));
-        system->displayText("LoRa send error", "Radio busy");
         return false;
     }
 
@@ -127,51 +91,49 @@ bool Communication::send() {
 
     if (!size) {
         system->serialError(PSTR("[APRS] Error during string encode"), false);
-        system->displayText("LoRa send error", "APRS encode error");
-    } else {
-        buffer[0] = '<';
-        buffer[1]= 0xFF;
-        buffer[2] = 0x01;
-
-        for (uint8_t i = 0; i < size; i++) {
-            buffer[i + 3] = bufferText[i];
-            Log.verboseln(F("[LORA_TX] Payload[%d]=%X %c"), i, buffer[i], buffer[i]);
-        }
-
-        if (USE_RF) {
-            Radio.Send(buffer, size + 3);
-            Radio.IrqProcess();
-        }
-
-        serialJsonWriter
-                .beginObject()
-                .property(F("type"), PSTR("lora"))
-                .property(F("state"), PSTR("tx"))
-                .property(F("payload"), bufferText)
-                .endObject(); SerialPi->println();
-
-        Log.infoln(F("[LORA_TX] Start send : %s"), bufferText);
-        system->displayText("LoRa send", bufferText);
-
-        if (!USE_RF) {
-            System::delayWdt(1000);
-            sent();
-        }
-
-        return true;
+        return false;
     }
+
+    buffer[0] = '<';
+    buffer[1]= 0xFF;
+    buffer[2] = 0x01;
+
+    for (uint8_t i = 0; i < size; i++) {
+        buffer[i + 3] = bufferText[i];
+        Log.verboseln(F("[LORA_TX] Payload[%d]=%X %c"), i, buffer[i], buffer[i]);
+    }
+
+    if (USE_RF) {
+        Radio.Send(buffer, size + 3);
+        Radio.IrqProcess();
+    }
+
+    serialJsonWriter
+            .beginObject()
+            .property(F("type"), PSTR("lora"))
+            .property(F("state"), PSTR("tx"))
+            .property(F("payload"), bufferText)
+            .endObject(); SerialPi->println();
+
+    Log.infoln(F("[LORA_TX] Start send : %s"), bufferText);
+
+    if (!USE_RF) {
+        System::delayWdt(1000);
+        sent();
+    }
+
+    return true;
 }
 
 bool Communication::sendMessage(const char* destination, const char* message, const char* ackToConfirm) {
+    Aprs::reset(&aprsPacketTx);
+
     strcpy_P(aprsPacketTx.path, PSTR(APRS_PATH));
     strcpy_P(aprsPacketTx.source, PSTR(APRS_CALLSIGN));
+    strcpy_P(aprsPacketTx.destination, PSTR(APRS_DESTINATION));
+
     strcpy(aprsPacketTx.message.destination, destination);
     strcpy(aprsPacketTx.message.message, message);
-    aprsPacketTx.content[0] = '\0';
-
-    aprsPacketTx.message.ackToAsk[0] = '\0';
-    aprsPacketTx.message.ackToConfirm[0] = '\0';
-    aprsPacketTx.message.ackToReject[0] = '\0';
 
     if (strlen(ackToConfirm) > 0) {
         strcpy(aprsPacketTx.message.ackToConfirm, ackToConfirm);
@@ -183,6 +145,8 @@ bool Communication::sendMessage(const char* destination, const char* message, co
 }
 
 bool Communication::sendTelemetry() {
+    Aprs::reset(&aprsPacketTx);
+
     bool result = false;
 
     if (shouldSendTelemetryParams) {
@@ -193,7 +157,6 @@ bool Communication::sendTelemetry() {
     strcpy_P(aprsPacketTx.path, PSTR(APRS_PATH));
     strcpy_P(aprsPacketTx.source, PSTR(APRS_CALLSIGN));
     strcpy_P(aprsPacketTx.destination, PSTR(APRS_DESTINATION));
-    aprsPacketTx.content[0] = '\0';
 
     sprintf_P(aprsPacketTx.comment, PSTR("Chg:%s Up:%ld"), mpptChg::getStatusAsString(system->mpptMonitor.getStatus()), millis() / 1000);
     aprsPacketTx.telemetries.telemetrySequenceNumber = telemetrySequenceNumber++;
@@ -201,7 +164,7 @@ bool Communication::sendTelemetry() {
     aprsPacketTx.telemetries.telemetriesAnalog[1].value = system->mpptMonitor.getCurrentBattery();
     aprsPacketTx.telemetries.telemetriesAnalog[2].value = system->mpptMonitor.getVoltageSolar();
     aprsPacketTx.telemetries.telemetriesAnalog[3].value = system->mpptMonitor.getCurrentSolar();
-    aprsPacketTx.telemetries.telemetriesAnalog[4].value = system->mpptMonitor.isWatchdogEnabled() ? system->mpptMonitor.getWatchdogCounter() : system->mpptMonitor.getWatchdogSafetyTimeLeft() / 1000;
+    aprsPacketTx.telemetries.telemetriesAnalog[4].value = system->mpptMonitor.isWatchdogEnabled() ? system->mpptMonitor.getWatchdogCounter() : 0;
     aprsPacketTx.telemetries.telemetriesBoolean[0].value = system->mpptMonitor.isNight();
     aprsPacketTx.telemetries.telemetriesBoolean[1].value = system->mpptMonitor.isAlert();
     aprsPacketTx.telemetries.telemetriesBoolean[2].value = system->mpptMonitor.isWatchdogEnabled();
@@ -218,10 +181,43 @@ bool Communication::sendTelemetry() {
 }
 
 bool Communication::sendTelemetryParams() {
+    Aprs::reset(&aprsPacketTx);
+
     strcpy_P(aprsPacketTx.path, PSTR(APRS_PATH));
     strcpy_P(aprsPacketTx.source, PSTR(APRS_CALLSIGN));
     strcpy_P(aprsPacketTx.destination, PSTR(APRS_DESTINATION));
-    aprsPacketTx.content[0] = '\0';
+
+    // Voltage battery between 0 and 15000mV
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[0].name, PSTR("VBat")); // 7
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[0].unit, PSTR("V"));
+    aprsPacketTx.telemetries.telemetriesAnalog[0].equation.b = 0.001;
+
+    // Current charge between 0mA and 2000mA
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[1].name, PSTR("IBat")); // 6
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[1].unit, PSTR("mA"));
+
+    // Voltage battery between 0 and 30000mV
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[2].name, PSTR("VSol")); // 5
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[2].unit, PSTR("V"));
+    aprsPacketTx.telemetries.telemetriesAnalog[2].equation.b = 0.001;
+
+    // Current charge between 0mA and 2000mA
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[3].name, PSTR("ISol")); // 5
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[3].unit, PSTR("mA"));
+
+    // Watchdog poweroff in seconds
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[4].name, PSTR("Slep")); // 4
+    strcpy_P(aprsPacketTx.telemetries.telemetriesAnalog[4].unit, PSTR("min"));
+    aprsPacketTx.telemetries.telemetriesAnalog[4].equation.b = 0.0166;
+
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[0].name, PSTR("Night"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[1].name, PSTR("Alrt"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[2].name, PSTR("WDog"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[3].name, PSTR("5V"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[4].name, PSTR("Box"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[5].name, PSTR("R1"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[6].name, PSTR("R2"));
+    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[7].name, PSTR("Err"));
 
     aprsPacketTx.type = TelemetryLabel;
     bool result = send();
@@ -236,11 +232,45 @@ bool Communication::sendTelemetryParams() {
 }
 
 bool Communication::sendPosition(const char* comment) {
+    Aprs::reset(&aprsPacketTx);
+
     strcpy_P(aprsPacketTx.path, PSTR(APRS_PATH));
     strcpy_P(aprsPacketTx.source, PSTR(APRS_CALLSIGN));
     strcpy_P(aprsPacketTx.destination, PSTR(APRS_DESTINATION));
-    aprsPacketTx.content[0] = '\0';
-    strcpy(aprsPacketTx.comment, comment);
+
+    aprsPacketTx.position.symbol = APRS_SYMBOL;
+    aprsPacketTx.position.overlay = APRS_SYMBOL_TABLE;
+    aprsPacketTx.position.latitude = APRS_LATITUDE;
+    aprsPacketTx.position.longitude = APRS_LONGITUDE;
+    aprsPacketTx.position.altitudeFeet = APRS_ALTITUDE * 3.28;
+    aprsPacketTx.position.altitudeInComment = false;
+
+    aprsPacketTx.weather.useHumidity = true;
+    aprsPacketTx.weather.useTemperature = true;
+    aprsPacketTx.weather.usePressure = true;
+
+    aprsPacketTx.telemetries.telemetrySequenceNumber = telemetrySequenceNumber++;
+    aprsPacketTx.telemetries.telemetriesAnalog[0].value = system->mpptMonitor.getVoltageBattery();
+    aprsPacketTx.telemetries.telemetriesAnalog[1].value = system->mpptMonitor.getCurrentBattery();
+    aprsPacketTx.telemetries.telemetriesAnalog[2].value = system->mpptMonitor.getVoltageSolar();
+    aprsPacketTx.telemetries.telemetriesAnalog[3].value = system->mpptMonitor.getCurrentSolar();
+    aprsPacketTx.telemetries.telemetriesAnalog[4].value = system->mpptMonitor.isWatchdogEnabled() ? system->mpptMonitor.getWatchdogCounter() : 0;
+    aprsPacketTx.telemetries.telemetriesBoolean[0].value = system->mpptMonitor.isNight();
+    aprsPacketTx.telemetries.telemetriesBoolean[1].value = system->mpptMonitor.isAlert();
+    aprsPacketTx.telemetries.telemetriesBoolean[2].value = system->mpptMonitor.isWatchdogEnabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[3].value = system->mpptMonitor.isPowerEnabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[4].value = system->isBoxOpened();
+    aprsPacketTx.telemetries.telemetriesBoolean[5].value = system->gpio.isRelay1Enabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[6].value = system->gpio.isRelay2Enabled();
+    aprsPacketTx.telemetries.telemetriesBoolean[7].value = system->nbError > 0;
+
+    aprsPacketTx.position.withWeather = !system->weatherSensors.hasError();
+
+    if (APRS_TELEMETRY_IN_POSITION || !aprsPacketTx.position.withWeather) {
+        aprsPacketTx.position.withTelemetry = true;
+        sprintf_P(aprsPacketTx.comment, PSTR("Up:%ld"), millis() / 1000);
+        aprsPacketTx.telemetries.telemetrySequenceNumber = telemetrySequenceNumber++;
+    }
 
     aprsPacketTx.type = Position;
     aprsPacketTx.position.withWeather = system->weatherSensors.getPressure() > 0;
@@ -253,10 +283,12 @@ bool Communication::sendPosition(const char* comment) {
 }
 
 bool Communication::sendStatus(const char* comment) {
+    Aprs::reset(&aprsPacketTx);
+
     strcpy_P(aprsPacketTx.path, PSTR(APRS_PATH));
     strcpy_P(aprsPacketTx.source, PSTR(APRS_CALLSIGN));
     strcpy_P(aprsPacketTx.destination, PSTR(APRS_DESTINATION));
-    aprsPacketTx.content[0] = '\0';
+
     strcpy(aprsPacketTx.comment, comment);
 
     aprsPacketTx.type = Status;
@@ -266,13 +298,14 @@ bool Communication::sendStatus(const char* comment) {
 
 void Communication::sent() {
     Radio.IrqProcess();
-    Radio.RxBoosted(0);
 
     system->turnOffRGB();
 
     Log.infoln(F("[LORA_TX] End"));
 
     timerLoraTxWatchdog.restart();
+
+    Radio.RxBoosted(0);
 }
 
 void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int8_t snr) {
@@ -291,7 +324,6 @@ void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int
     }
 
     system->turnOnRGB(COLOR_GREEN);
-    system->displayText("LoRa received", reinterpret_cast<const char *>(payload));
     system->turnOffRGB();
 
     bool shouldTx = false;
@@ -304,8 +336,6 @@ void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int
         if (strstr_P(aprsPacketRx.message.destination, PSTR(APRS_CALLSIGN)) != nullptr) {
             Log.traceln(F("[APRS] Message for me : %s"), aprsPacketRx.content);
 
-            system->displayText(PSTR("[APRS] Received for me"), aprsPacketRx.content);
-
             if (strlen(aprsPacketRx.message.message) > 0) {
                 shouldTx = sendMessage(aprsPacketRx.source, PSTR(""), aprsPacketRx.message.ackToConfirm);
 
@@ -314,34 +344,18 @@ void Communication::received(uint8_t * payload, uint16_t size, int16_t rssi, int
                 shouldTx |= sendMessage(aprsPacketRx.source, processCommandResult ? PSTR("OK") : PSTR("KO"));
             }
         } else if (system->isFunctionAllowed(EEPROM_ADDRESS_APRS_DIGIPEATER)) {
-            // Digi only for WIDE1-1 or VIA Callsign
-            const char *hasWide = strstr_P(aprsPacketRx.path, PSTR("WIDE1-1"));
-            const char *hasCallsign = strstr_P(aprsPacketRx.path, PSTR(APRS_CALLSIGN));
-            shouldTx = hasWide != nullptr || hasCallsign != nullptr;
+            shouldTx = Aprs::canBeDigipeated(aprsPacketRx.path, APRS_CALLSIGN);
 
-            Log.traceln(F("[APRS] Message should TX : %T. hasWide : %T, hasCallsign : %T"), shouldTx,
-                        hasWide != nullptr, hasCallsign != nullptr);
+            Log.traceln(F("[APRS] Message should TX : %T"), shouldTx);
+
             if (shouldTx) {
-                if (hasCallsign != nullptr && *(hasCallsign + 1) != '*') { // Test if VIA callsign not consumed
-                    Log.traceln(F("[APRS] Message via callsign not consumed"));
-                    sprintf_P(aprsPacketTx.path, PSTR("%s*%s"), PSTR(APRS_CALLSIGN),
-                              hasWide != nullptr ? PSTR(",WIDE1-1") : PSTR(""));
-                } else if (hasWide != nullptr && *(hasWide + 1) != '*') { // Test if WIDE not consumed
-                    Log.traceln(F("[APRS] Message via WIDE not consumed"));
-                    sprintf_P(aprsPacketTx.path, PSTR("%s,WIDE1-1*"), PSTR(APRS_CALLSIGN));
-                } else { // We do not TX
-                    Log.traceln(F("[APRS] Message via not OK"));
-                    shouldTx = false;
-                }
-
-                if (shouldTx) {
-                    Log.infoln(F("[APRS] Message digipeated"));
-                    strcpy(aprsPacketTx.source, aprsPacketRx.source);
-                    strcpy(aprsPacketTx.destination, aprsPacketRx.destination);
-                    strcpy(aprsPacketTx.content, aprsPacketRx.content);
-                    aprsPacketTx.type = RawContent;
-                    shouldTx = send();
-                }
+                Log.infoln(F("[APRS] Message digipeated via %s"), aprsPacketRx.path);
+                strcpy(aprsPacketTx.source, aprsPacketRx.source);
+                strcpy(aprsPacketTx.path, aprsPacketRx.path);
+                strcpy(aprsPacketTx.destination, aprsPacketRx.destination);
+                strcpy(aprsPacketTx.content, aprsPacketRx.content);
+                aprsPacketTx.type = RawContent;
+                shouldTx = send();
             }
         }
     }

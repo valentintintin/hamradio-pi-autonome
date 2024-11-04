@@ -13,16 +13,16 @@ bool EnergyDummy::fetchVoltageBattery() {
 }
 
 bool EnergyDummy::fetchCurrentBattery() {
-    vb = 123;
+    ib = 123;
     return true;
 }
 
 bool EnergyDummy::fetchVoltageSolar() {
-    vb = 23456;
+    vs = 23456;
     return true;
 }
 
 bool EnergyDummy::fetchCurrentSolar() {
-    vb = 345;
+    is = 345;
     return true;
 }

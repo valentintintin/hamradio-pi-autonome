@@ -6,19 +6,20 @@
 
 WatchdogMasterPin::WatchdogMasterPin(System *system, GpioPin *gpio, unsigned long intervalCheck) : WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN")), gpio(gpio) {
     gpio->setState(HIGH);
-    lastState = true;
 }
 
 bool WatchdogMasterPin::runOnce() {
-    if (wantToSleep) {
-        if (lastState) {
-            gpio->setState(LOW);
-            lastState = false;
-            timerSleep.restart();
-        } else if (timerSleep.hasExpired()) {
-            gpio->setState(HIGH);
-            lastState = true;
-            wantToSleep  = false;
+    if (millis() < WATCHDOG_TIME_AFTER_BOOT) {
+        return true;
+    }
+
+    if (wantToSleep) { // User ask to sleep
+        if (gpio->getState()) { // Currently running
+            gpio->setState(LOW); // Shutdown
+            timerSleep.restart(); // Start timer
+        } else if (timerSleep.hasExpired()) { // Not running and timer expired
+            gpio->setState(HIGH); // Turn on
+            wantToSleep  = false; // Reset state
             hasFed = false;
         }
 
@@ -34,10 +35,8 @@ bool WatchdogMasterPin::runOnce() {
     Log.warningln(F("[WATCHDOG_PIN_%d] Dog not fed so toggle pin"), gpio->getPin());
 
     gpio->setState(LOW);
-    lastState = false;
     delayWdt(TIME_WAIT_TOGGLE);
     gpio->setState(HIGH);
-    lastState = true;
 
     return true;
 }

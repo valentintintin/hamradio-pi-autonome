@@ -27,7 +27,7 @@ public:
         return is;
     }
 
-    inline int getCurrentCharge() const {
+    inline int16_t getCurrentCharge() const {
         return is - ib;
     }
 

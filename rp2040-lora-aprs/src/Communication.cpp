@@ -10,6 +10,15 @@ Communication::Communication(System *system) : system(system) {
 }
 
 bool Communication::begin() {
+    Log.infoln(F("[RADIO] Init"));
+
+    SPI1.setSCK(LORA_SCK);
+    SPI1.setTX(LORA_MOSI);
+    SPI1.setRX(LORA_MISO);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    SPI1.begin(false);
+
     if (lora.begin(RF_FREQUENCY, LORA_BANDWIDTH, LORA_SPREADING_FACTOR, LORA_CODINGRATE, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, TX_OUTPUT_POWER, 8, 0, false) != RADIOLIB_ERR_NONE) {
         Log.errorln(F("[RADIO] Init error"));
         _hasError = true;
@@ -22,25 +31,35 @@ bool Communication::begin() {
 
     uint16_t state = lora.setRxBoostedGainMode(true);
     if (state != RADIOLIB_ERR_NONE) {
+        Log.errorln(F("[RADIO] Init KO setRxBoostedGainMode"));
         _hasError = true;
+        return false;
     }
 
     state = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
     if (state != RADIOLIB_ERR_NONE) {
+        Log.errorln(F("[RADIO] Init KO setCRC"));
         _hasError = true;
+        return false;
     }
 
     state = lora.setCurrentLimit(140); // https://github.com/jgromes/RadioLib/discussions/489
     if (state != RADIOLIB_ERR_NONE) {
+        Log.errorln(F("[RADIO] Init KO setCurrentLimit"));
         _hasError = true;
+        return false;
     }
 
     state = lora.startReceive();
     if (state != RADIOLIB_ERR_NONE) {
+        Log.errorln(F("[RADIO] Init KO startReceive"));
         _hasError = true;
+        return false;
     }
 
     _hasError = false;
+
+    Log.infoln(F("[RADIO] Init OK"));
 
     return true;
 }
@@ -93,26 +112,26 @@ bool Communication::send() {
         Log.infoln(F("[LORA_TX] Start send %d chars : %s"), size, bufferText);
 
 #ifndef USE_FAKE_RF
-            int state = lora.transmit(buffer, size + 3);
+            int currentState = lora.transmit(buffer, size + 3);
 
-            if (state == RADIOLIB_ERR_NONE) {
+            if (currentState == RADIOLIB_ERR_NONE) {
                 sent();
-            } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
+            } else if (currentState == RADIOLIB_ERR_PACKET_TOO_LONG) {
                 Log.errorln(F("[LORA] TX Error too long"));
                 _hasError = true;
                 return false;
-            } else if (state == RADIOLIB_ERR_TX_TIMEOUT) {
+            } else if (currentState == RADIOLIB_ERR_TX_TIMEOUT) {
                 Log.errorln(F("[LORA] TX Error timeout"));
                 _hasError = true;
                 return false;
             } else {
-                sprintf_P(bufferText, PSTR("[LORA] TX Error : %d"), state);
+                sprintf_P(bufferText, PSTR("[LORA] TX Error : %d"), currentState);
                 _hasError = true;
                 Log.errorln(bufferText);
                 return false;
             }
 #else
-            System::delayWdt(1000);
+            delayWdt(1000);
             sent();
 #endif
 

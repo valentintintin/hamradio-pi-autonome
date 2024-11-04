@@ -9,13 +9,18 @@ GpioPin::GpioPin(pin_size_t pin, PinMode mode, bool isAdc, bool inverted) : pin(
 void GpioPin::setState(bool state) {
     assert(mode == OUTPUT);
 
-    Log.infoln(F("[GPIO_%d] Set %d"), pin, state);
+    Log.infoln(F("[GPIO_%d] Set %T"), pin, state);
 
     digitalWrite(pin, inverted == !state);
+
+    currentState = state;
 }
 
 bool GpioPin::getState() {
-    assert(mode != OUTPUT);
+    if (mode == OUTPUT) {
+        return currentState;
+    }
+
     assert(!isAdc);
 
     bool result = digitalRead(pin);
@@ -24,7 +29,7 @@ bool GpioPin::getState() {
         result = !result;
     }
 
-    Log.infoln(F("[GPIO_%d] Get state %t"), pin, result);
+    Log.infoln(F("[GPIO_%d] Get currentState %T"), pin, result);
 
     return result;
 }

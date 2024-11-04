@@ -82,6 +82,7 @@ void Command::doMpptWatchdog(MyCommandParser::Argument *args, char *response) {
     uint64_t watchdog = args[0].asUInt64;
 
     bool ok = system->mpptMonitor.setWatchdog(watchdog);
+    system->mpptMonitor.watchdogManagedByUser = true;
 
     sprintf_P(response, ok ? PSTR("OK") : PSTR("KO"));
 }

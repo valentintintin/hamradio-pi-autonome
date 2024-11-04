@@ -10,10 +10,17 @@
 #define REG_TEMPERATURE 0x8
 #define REG_PRESSURE 0xA
 #define REG_HUMIDITY 0xC
-#define REG_PING 0xF0
+#define REG_SECONDS 0xE
+#define REG_MINUTES 0x10
+#define REG_HOURS 0x12
+#define REG_DAYS 0x14
+#define REG_MONTHS 0x16
+#define REG_YEARS 0x18
+#define REG_PING 0x1A
 
 #define HAS_POWER 0b1
 #define HAS_WEATHER 0b10
+#define HAS_RTC 0b100
 
 class System;
 

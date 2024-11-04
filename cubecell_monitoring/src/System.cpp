@@ -4,17 +4,10 @@
 #include "innerWdt.h"
 #include "System.h"
 
-#ifdef USE_SCREEN
-System::System(SH1107Wire *display, CubeCell_NeoPixel *pixels, TimerEvent_t *wakeUpEvent) :
-        display(display), pixels(pixels), wakeUpEvent(wakeUpEvent),
-        mpptMonitor(this, WireUsed), weatherSensors(this), gpio(this), command(this) {
-}
-#else
 System::System(CubeCell_NeoPixel *pixels, TimerEvent_t *wakeUpEvent) :
         pixels(pixels), RTC(Wire), wakeUpEvent(wakeUpEvent),
         mpptMonitor(this, Wire), weatherSensors(this), gpio(this), command(this) {
 }
-#endif
 
 bool System::begin(RadioEvents_t *radioEvents) {
     Log.infoln(F("[SYSTEM] Starting"));
@@ -25,20 +18,11 @@ bool System::begin(RadioEvents_t *radioEvents) {
     pixels->begin();
     pixels->clear();
 
-#ifdef USE_SCREEN
-    if (!display->init()) {
-        serialError(PSTR("[SYSTEM] Display error"), false);
-    }
-#endif
-
-    turnScreenOn();
-
     turnOnRGB(COLOR_CYAN);
 
     EEPROM.begin(512);
 
     if (EEPROM.read(EEPROM_ADDRESS_VERSION) != EEPROM_VERSION) {
-        setFunctionAllowed(EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY, functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY]);
         setFunctionAllowed(EEPROM_ADDRESS_APRS_DIGIPEATER, functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER]);
         setFunctionAllowed(EEPROM_ADDRESS_APRS_TELEMETRY, functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY]);
         setFunctionAllowed(EEPROM_ADDRESS_APRS_POSITION, functionsAllowed[EEPROM_ADDRESS_APRS_POSITION]);
@@ -46,33 +30,20 @@ bool System::begin(RadioEvents_t *radioEvents) {
         setFunctionAllowed(EEPROM_ADDRESS_RESET_ON_ERROR, functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR]);
         setFunctionAllowed(EEPROM_ADDRESS_WATCHDOG, functionsAllowed[EEPROM_ADDRESS_WATCHDOG]);
         setFunctionAllowed(EEPROM_ADDRESS_WATCHDOG_LORA_TX, functionsAllowed[EEPROM_ADDRESS_WATCHDOG_LORA_TX]);
+        setFunctionAllowed(EEPROM_ADDRESS_MPPT_WATCHDOG, functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG]);
 
         EEPROM.write(EEPROM_ADDRESS_VERSION, EEPROM_VERSION);
         EEPROM.commit();
     } else {
-        functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY] = EEPROM.read(EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY);
-        functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER] = EEPROM.read(EEPROM_ADDRESS_APRS_DIGIPEATER);
-        functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY] = EEPROM.read(EEPROM_ADDRESS_APRS_TELEMETRY);
-        functionsAllowed[EEPROM_ADDRESS_APRS_POSITION] = EEPROM.read(EEPROM_ADDRESS_APRS_POSITION);
-        functionsAllowed[EEPROM_ADDRESS_SLEEP] = EEPROM.read(EEPROM_ADDRESS_SLEEP);
-        functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR] = EEPROM.read(EEPROM_ADDRESS_RESET_ON_ERROR);
-        functionsAllowed[EEPROM_ADDRESS_WATCHDOG] = EEPROM.read(EEPROM_ADDRESS_WATCHDOG);
-        functionsAllowed[EEPROM_ADDRESS_WATCHDOG_LORA_TX] = EEPROM.read(EEPROM_ADDRESS_WATCHDOG_LORA_TX);
+        setFunctionAllowed(EEPROM_ADDRESS_APRS_DIGIPEATER, EEPROM.read(EEPROM_ADDRESS_APRS_DIGIPEATER), false);
+        setFunctionAllowed(EEPROM_ADDRESS_APRS_TELEMETRY, EEPROM.read(EEPROM_ADDRESS_APRS_TELEMETRY), false);
+        setFunctionAllowed(EEPROM_ADDRESS_APRS_POSITION, EEPROM.read(EEPROM_ADDRESS_APRS_POSITION), false);
+        setFunctionAllowed(EEPROM_ADDRESS_SLEEP, EEPROM.read(EEPROM_ADDRESS_SLEEP), false);
+        setFunctionAllowed(EEPROM_ADDRESS_RESET_ON_ERROR, EEPROM.read(EEPROM_ADDRESS_RESET_ON_ERROR), false);
+        setFunctionAllowed(EEPROM_ADDRESS_WATCHDOG, EEPROM.read(EEPROM_ADDRESS_WATCHDOG), false);
+        setFunctionAllowed(EEPROM_ADDRESS_WATCHDOG_LORA_TX, EEPROM.read(EEPROM_ADDRESS_WATCHDOG_LORA_TX), false);
+        setFunctionAllowed(EEPROM_ADDRESS_MPPT_WATCHDOG, EEPROM.read(EEPROM_ADDRESS_MPPT_WATCHDOG), false);
     }
-
-    sprintf_P(bufferText, PSTR("MPPT Watchdog safety: %d Aprs Digi : %d Telem : %d Position : %d Sleep : %d Reset : %d Watchdog : %d Watchdog LoRa TX : %d"),
-            functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY],
-            functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER],
-            functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY],
-            functionsAllowed[EEPROM_ADDRESS_APRS_POSITION],
-            functionsAllowed[EEPROM_ADDRESS_SLEEP],
-            functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR],
-            functionsAllowed[EEPROM_ADDRESS_WATCHDOG],
-            functionsAllowed[EEPROM_ADDRESS_WATCHDOG_LORA_TX]
-    );
-
-    Log.infoln(F("[SYSTEM] EEPROM %s"), bufferText);
-    displayText(PSTR("EEPROM"), bufferText, 3000);
 
     weatherSensors.begin();
     mpptMonitor.begin();
@@ -93,7 +64,6 @@ bool System::begin(RadioEvents_t *radioEvents) {
     }
 
     printJsonSystem(PSTR("started"));
-    displayText(PSTR("Started"), bufferText);
 
     return true;
 }
@@ -113,7 +83,7 @@ void System::update() {
         size_t lineLength = streamReceived->readBytesUntil('\n', bufferText, 150);
         bufferText[lineLength] = '\0';
 
-        Log.traceln(PSTR("[SERIAL] Received %s"), bufferText);
+        Log.traceln(F("[SERIAL] Received %s"), bufferText);
 
         command.processCommand(bufferText);
 
@@ -129,7 +99,6 @@ void System::update() {
 
         if (forceSendTelemetry || timerState.hasExpired()) {
             printJsonSystem(PSTR("running"));
-
             timerState.restart();
         }
 
@@ -144,12 +113,11 @@ void System::update() {
             if (gpio.isRelay1Enabled()) {
                 gpio.setRelay1(false);
             }
+        }
 
-            if (isFunctionAllowed(EEPROM_ADDRESS_SLEEP) && mpptMonitor.getVoltageBattery() < VOLTAGE_TO_SLEEP && millis() >= DURATION_TO_WAIT_BEFORE_SLEEP) {
-                Log.infoln(F("[SLEEP] Battery is %dV and under of %dV so sleep"), mpptMonitor.getVoltageBattery(), VOLTAGE_TO_SLEEP);
-                displayText(PSTR("Sleep"), PSTR("Battery too low so sleep"), 1000);
-                sleep(SLEEP_DURATION);
-            }
+        if (isFunctionAllowed(EEPROM_ADDRESS_SLEEP) && mpptMonitor.getVoltageBattery() < VOLTAGE_TO_SLEEP && millis() >= DURATION_TO_WAIT_BEFORE_SLEEP) {
+            Log.infoln(F("[SLEEP] Battery is %dV and under of %dV so sleep"), mpptMonitor.getVoltageBattery(), VOLTAGE_TO_SLEEP);
+            sleep(SLEEP_DURATION);
         }
 
         if (timerTelemetry.hasExpired() || timerPosition.hasExpired() || timerStatus.hasExpired()
@@ -173,22 +141,21 @@ void System::update() {
                 timerStatus.restart();
             }
         }
-    }
 
-    if (timerScreen.hasExpired()) {
-        turnScreenOff();
-    }
+        if (timerBlinker.hasExpired() && ledColor == 0) {
+            turnOnRGB(COLOR_ORANGE);
+            turnOffRGB();
 
-    if (timerBlinker.hasExpired() && ledColor == 0) {
-        turnOnRGB(COLOR_ORANGE);
-        turnOffRGB();
-    }
+            if (isFunctionAllowed(EEPROM_ADDRESS_MPPT_WATCHDOG)) {
+                mpptMonitor.feedWatchdog();
+            }
+        }
 
-    if (isFunctionAllowed(EEPROM_ADDRESS_WATCHDOG_LORA_TX) && communication->hasWatchdogLoraTxExpired()) {
-        serialError(PSTR("[LORA_TX_WATCHDOG] No TX for a long time, reboot"), false);
-        displayText("LoRa TX Watchdog", "No TX, reboot");
-        delayWdt(1000);
-        CySoftwareReset();
+        if (isFunctionAllowed(EEPROM_ADDRESS_WATCHDOG_LORA_TX) && communication->hasWatchdogLoraTxExpired()) {
+            serialError(PSTR("[LORA_TX_WATCHDOG] No TX for a long time, reboot"), false);
+            delayWdt(1000);
+            CySoftwareReset();
+        }
     }
 
     delay(10);
@@ -218,56 +185,21 @@ void System::turnOffRGB() {
     turnOnRGB(0);
 }
 
-void System::turnScreenOn() {
-    if (!screenOn) {
-        screenOn = true;
-        Log.traceln(F("[SCREEN/LED] Turn screen/led on"));
-
-#ifdef USE_SCREEN
-        display->wakeup();
-#endif
-
-        timerScreen.restart();
-    }
-}
-
-void System::turnScreenOff() {
-    if (screenOn) {
-        Log.traceln(F("[SCREEN/LED] Turn screen/led off"));
-#ifdef USE_SCREEN
-        display->sleep();
-#endif
-
-        screenOn = false;
-    }
-
-    turnOffRGB();
-}
-
-void System::displayText(const char *title, const char *content, uint16_t pause) const {
-#ifdef USE_SCREEN
-    if (!screenOn) {
-        return;
-    }
-
-    Log.traceln(F("[Display] %s --> %s"), title, content);
-    display->clear();
-    display->drawString(0, 0, title);
-    display->drawStringMaxWidth(0, 10, 120, content);
-    display->display();
-    System::delayWdt(pause);
-#endif
-}
-
 DateTime System::nowToString(char *result) {
-    DateTime now = RTClib::now();
-    if (abs(CURRENT_YEAR - now.year()) >= 2) {
-        sprintf(result, "%04d-%02d-%02dT%02d:%02d:%02d Uptime %lds", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(), millis() / 1000);
-        Log.warningln("[TIME] Use System instead of RTC. RTC date : %s", result);
-        now = DateTime(TimerGetSysTime().Seconds);
+    if (USE_RTC) {
+        DateTime now = RTClib::now();
+        if (abs(CURRENT_YEAR - now.year()) >= 2) {
+            sprintf(result, "%04d-%02d-%02dT%02d:%02d:%02d Uptime %lds", now.year(), now.month(), now.day(), now.hour(),
+                    now.minute(), now.second(), millis() / 1000);
+            Log.warningln("[TIME] Use System instead of RTC. RTC date : %s", result);
+            now = DateTime(TimerGetSysTime().Seconds);
+        }
+        sprintf(result, "%04d-%02d-%02dT%02d:%02d:%02d Uptime %lds", now.year(), now.month(), now.day(), now.hour(),
+                now.minute(), now.second(), millis() / 1000);
+        return now;
     }
-    sprintf(result, "%04d-%02d-%02dT%02d:%02d:%02d Uptime %lds", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second(), millis() / 1000);
-    return now;
+
+    return DateTime(0);
 }
 
 void System::setTimeFromRTcToInternalRtc(uint64_t epoch) {
@@ -287,27 +219,22 @@ void System::serialError(const char *content, bool addError) {
         this->addError();
     }
     printJsonSystem((char*)content);
-    if (screenOn) {
-        delayWdt(2000);
-    }
     turnOffRGB();
 }
 
-void System::setFunctionAllowed(byte function, bool allowed) {
-    sprintf_P(bufferText, PSTR("[EEPROM] Set %d to %d"), function, allowed);
-    Log.infoln(bufferText);
-    displayText("EEPROM", bufferText);
+void System::setFunctionAllowed(byte function, bool allowed, bool save) {
+    if (save) {
+        Log.infoln(F("[EEPROM] Set %T to %T"), function, allowed);
 
-    functionsAllowed[function] = allowed;
+        functionsAllowed[function] = allowed;
 
-    EEPROM.write(function, allowed);
-    EEPROM.commit();
+        EEPROM.write(function, allowed);
+        EEPROM.commit();
+    }
 
     timerState.setExpired();
 
-    if (function == EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY && allowed) {
-        mpptMonitor.resetWatchdogSafety();
-    } else if (function == EEPROM_ADDRESS_RESET_ON_ERROR) {
+    if (function == EEPROM_ADDRESS_RESET_ON_ERROR) {
         nbError = 0;
     } else if (function == EEPROM_ADDRESS_WATCHDOG) {
         if (allowed) {
@@ -319,7 +246,14 @@ void System::setFunctionAllowed(byte function, bool allowed) {
 
         }
     } else if (function == EEPROM_ADDRESS_WATCHDOG_LORA_TX) {
-      communication->resetWatchdogLoraTx();
+        communication->resetWatchdogLoraTx();
+    } else if (function == EEPROM_ADDRESS_MPPT_WATCHDOG) {
+        mpptMonitor.watchdogManagedByUser = false;
+        if (allowed) {
+            mpptMonitor.setWatchdog(10);
+        } else {
+            mpptMonitor.setWatchdog(0);
+        }
     }
 }
 
@@ -335,8 +269,6 @@ void System::printJsonSystem(const char *state) {
             .property(F("time"), now.unixtime())
             .property(F("uptime"), millis() / 1000)
             .property(F("nbError"), nbError)
-            .property(F("mpptWatchdogSafetyTimer"), mpptMonitor.getWatchdogSafetyTimeLeft() / 1000)
-            .property(F("mpptWatchdogSafety"), functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY])
             .property(F("aprsDigipeater"), functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER])
             .property(F("aprsTelemetry"), functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY])
             .property(F("aprsPosition"), functionsAllowed[EEPROM_ADDRESS_APRS_POSITION])
@@ -345,37 +277,34 @@ void System::printJsonSystem(const char *state) {
             .property(F("watchdog"), functionsAllowed[EEPROM_ADDRESS_WATCHDOG])
             .property(F("watchdogLoraTx"), functionsAllowed[EEPROM_ADDRESS_WATCHDOG_LORA_TX])
             .property(F("watchdogLoraTxTimer"), communication->getWatchdogLoraTxTimeLeft() / 1000)
-            .endObject(); SerialPi->println();
+            .property(F("mpptWatchdog"), functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG])
+                    .endObject(); SerialPi->println();
 
     gpio.printJson();
 
     Log.infoln(F("[TIME] %s. Temperature RTC: %FC"), bufferText, RTC.getTemperature());
-    displayText(PSTR("Time"), bufferText, 1000);
 
-    Log.infoln(F("[SYSTEM] EEPROM MPPT Watchdog safety: %T Aprs Digi : %T Telem : %T Position : %T Sleep : %T Reset : %T Watchdog : %T Watchdog LoRa TX : %T"),
-               functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG_SAFETY],
+    Log.infoln(F("[SYSTEM] EEPROM Aprs Digi : %T Telem : %T Position : %T Sleep : %T Reset : %T Watchdog : %T Watchdog LoRa TX : %T MPPT Watchdog : %T"),
                functionsAllowed[EEPROM_ADDRESS_APRS_DIGIPEATER],
                functionsAllowed[EEPROM_ADDRESS_APRS_TELEMETRY],
                functionsAllowed[EEPROM_ADDRESS_APRS_POSITION],
                functionsAllowed[EEPROM_ADDRESS_SLEEP],
                functionsAllowed[EEPROM_ADDRESS_RESET_ON_ERROR],
                functionsAllowed[EEPROM_ADDRESS_WATCHDOG],
-               functionsAllowed[EEPROM_ADDRESS_WATCHDOG_LORA_TX]
+               functionsAllowed[EEPROM_ADDRESS_WATCHDOG_LORA_TX],
+               functionsAllowed[EEPROM_ADDRESS_MPPT_WATCHDOG]
     );
 }
 
 void System::sleep(uint64_t time) {
     turnOnRGB(COLOR_BLUE);
 
-    sprintf_P(bufferText, PSTR("[SLEEP] Sleep during %ums"), time);
-    Log.infoln(bufferText);
-    displayText("Sleep", bufferText);
+    Log.infoln(F("[SLEEP] Sleep during %ums"), time);
 
     gpio.setRelay2(false);
     gpio.setRelay1(false);
     mpptMonitor.setWatchdog(SLEEP_DURATION + DURATION_TO_WAIT_BEFORE_SLEEP + 10000, 1);
 
-    turnScreenOff();
     digitalWrite(Vext, HIGH); // 0V
     Radio.Sleep();
     TimerSetValue(wakeUpEvent, time);

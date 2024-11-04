@@ -6,13 +6,13 @@
 
 #include "pico.h"
 
-#include "pico/sleep.h"
+#include "sleep.h"
 #include "pico/stdlib.h"
 
 #include "hardware/clocks.h"
 #include "hardware/pll.h"
 #include "hardware/regs/io_bank0.h"
-#include "hardware/rosc.h"
+#include "rosc.h"
 #include "hardware/rtc.h"
 #include "hardware/xosc.h"
 // For __wfi

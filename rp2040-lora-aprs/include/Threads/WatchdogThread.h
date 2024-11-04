@@ -3,6 +3,8 @@
 
 #include "MyThread.h"
 
+#define WATCHDOG_TIME_AFTER_BOOT 60000 // 1 minute
+
 class System;
 
 class WatchdogThread : public MyThread {

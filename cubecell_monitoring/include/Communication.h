@@ -2,8 +2,7 @@
 #define CUBECELL_MONITORING_COMMUNICATION_H
 
 #include <radio/radio.h>
-#include "../lib/Aprs/Aprs.h"
-
+#include "Aprs.h"
 #include "Config.h"
 #include "Timer.h"
 
@@ -38,7 +37,7 @@ public:
 private:
     System* system;
 
-    uint8_t buffer[TRX_BUFFER + 3]{};
+    uint8_t buffer[TRX_BUFFER]{};
     AprsPacket aprsPacketTx;
     AprsPacketLite aprsPacketRx;
     uint16_t telemetrySequenceNumber = 0;

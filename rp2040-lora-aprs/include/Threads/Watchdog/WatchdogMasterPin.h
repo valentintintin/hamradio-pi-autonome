@@ -17,7 +17,6 @@ protected:
 private:
     GpioPin *gpio;
     Timer timerSleep;
-    bool lastState;
     bool hasFed = false;
     bool wantToSleep = false;
 };

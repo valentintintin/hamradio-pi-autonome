@@ -13,22 +13,14 @@
 #include "WeatherSensors.h"
 #include "Gpio.h"
 
-#ifdef USE_SCREEN
-#include <HT_SH1107Wire.h>
-#endif
-
 class System {
 public:
-#ifdef USE_SCREEN
-    explicit System(SH1107Wire *display, CubeCell_NeoPixel *pixels, TimerEvent_t *wakeUpEvent);
-#else
     explicit System(CubeCell_NeoPixel *pixels, TimerEvent_t *wakeUpEvent);
-#endif
 
     bool begin(RadioEvents_t *radioEvents);
     void update();
     bool isBoxOpened() const;
-    void setFunctionAllowed(byte function, bool allowed);
+    void setFunctionAllowed(byte function, bool allowed, bool save = true);
     void sleep(uint64_t time);
     void resetTimerJson();
 
@@ -38,7 +30,6 @@ public:
 
     void turnOnRGB(uint32_t color);
     void turnOffRGB();
-    void displayText(const char* title, const char* content, uint16_t pause = TIME_PAUSE_SCREEN) const;
     void serialError(const char* content, bool addError = true);
     void addError();
     void removeOneError();
@@ -58,37 +49,28 @@ public:
     bool forceSendTelemetry = false;
     uint8_t nbError = 0;
 private:
-    bool screenOn = false;
     uint32_t ledColor = 0;
 
-    /*
-        EEPROM_ADDRESS_WATCHDOG_SAFETY
-        EEPROM_ADDRESS_APRS_DIGIPEATER
-        EEPROM_ADDRESS_APRS_TELEMETRY
-        EEPROM_ADDRESS_APRS_POSITION
-        EEPROM_ADDRESS_SLEEP
-        EEPROM_ADDRESS_RESET_ON_ERROR
-        EEPROM_ADDRESS_WATCHDOG
-        EEPROM_ADDRESS_WATCHDOG_LORA_TX
-     */
-    bool functionsAllowed[8] = {false, true, true, true, false, false, false, true};
+    bool functionsAllowed[8] = {
+            true, // EEPROM_ADDRESS_MPPT_WATCHDOG
+            true, // EEPROM_ADDRESS_APRS_DIGIPEATER
+            true, // EEPROM_ADDRESS_APRS_TELEMETRY
+            true, // EEPROM_ADDRESS_APRS_POSITION
+            false, // EEPROM_ADDRESS_SLEEP
+            false, // EEPROM_ADDRESS_RESET_ON_ERROR
+            false, // EEPROM_ADDRESS_WATCHDOG
+            true // EEPROM_ADDRESS_WATCHDOG_LORA_TX
+    };
 
     Timer timerStatus = Timer(INTERVAL_STATUS_APRS, false);
     Timer timerPosition = Timer(INTERVAL_POSITION_AND_WEATHER_APRS, true);
-    Timer timerTelemetry = Timer(INTERVAL_TELEMETRY_APRS, false);
+    Timer timerTelemetry = Timer(INTERVAL_TELEMETRY_APRS, true);
     Timer timerState = Timer(INTERVAL_STATE, true);
-    Timer timerScreen = Timer(TIME_SCREEN_ON);
     Timer timerBoxOpened = Timer(INTERVAL_ALARM_BOX_OPENED_APRS, true);
-    Timer timerBlinker = Timer(5000, true);
+    Timer timerBlinker = Timer(INTERVAL_BLINKER, true);
 
     CubeCell_NeoPixel *pixels;
-#ifdef USE_SCREEN
-    SH1107Wire *display;
-#endif
     TimerEvent_t *wakeUpEvent;
-
-    void turnScreenOn();
-    void turnScreenOff();
 
     void printJsonSystem(const char *state);
 };

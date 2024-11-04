@@ -8,6 +8,10 @@ System systemControl;
 void setup() {
     Serial.begin(115200);
 
+    if (LOG_LEVEL != LOG_LEVEL_INFO) {
+        delay(2500); // Wait for serial debug
+    }
+
     Log.begin(LOG_LEVEL, &Serial);
 
     systemControl.begin();
@@ -35,4 +39,13 @@ void delayWdt(uint32_t milliseconds) {
 #else
     delay(milliseconds);
 #endif
+}
+
+void ledBlink(uint8_t howMany, uint16_t milliseconds) {
+    for (uint8_t i = 0; i < howMany - 1; i++) {
+        digitalWrite(PIN_LED, HIGH);
+        delayWdt(milliseconds);
+        digitalWrite(PIN_LED, LOW);
+        delayWdt(milliseconds);
+    }
 }

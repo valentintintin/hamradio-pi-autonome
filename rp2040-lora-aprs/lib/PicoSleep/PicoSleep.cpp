@@ -4,7 +4,7 @@
 
 static bool awake;
 
-static void sleep_callback(void)
+static void sleep_callback()
 {
     awake = true;
 }
@@ -25,7 +25,7 @@ void epoch_to_datetime(time_t epoch, datetime_t *dt)
 
 void cpuDeepSleep(uint32_t msecs)
 {
-    time_t seconds = (time_t)(msecs / 1000);
+    auto seconds = (time_t)(msecs / 1000);
     datetime_t t_init, t_alarm;
 
     awake = false;
@@ -45,7 +45,7 @@ void cpuDeepSleep(uint32_t msecs)
         delay(1);
     }
 
-    /* For now, I don't know how to revert this state
+    /* For now, I don't know how to revert this currentState
         We just reboot in order to get back operational */
     rp2040.reboot();
 

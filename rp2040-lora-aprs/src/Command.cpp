@@ -45,11 +45,11 @@ bool Command::processCommand(const char *command) {
     Log.traceln(F("[COMMAND] Process : %s"), command);
 
     if (!parser.processCommand(command, response)) {
+        Log.warningln(F("[COMMAND] %s KO (%s)"), command, response);
         return false;
     }
 
-    Log.infoln(F("[COMMAND] %s = %s"), command, response);
-
+    Log.infoln(F("[COMMAND] %s OK (%s)"), command, response);
     return true;
 }
 
@@ -75,7 +75,7 @@ void Command::doTelemetryParams(MyCommandParser::Argument *args, char *response)
 void Command::doLora(MyCommandParser::Argument *args, char *response) {
     char *message = args[0].asString;
 
-    // todo remake
+    // todo remake ?
     system->communication.sendMessage(PSTR(APRS_DESTINATION), message);
 
     strcpy_P(response, PSTR("OK"));
@@ -98,8 +98,8 @@ void Command::doPing(MyCommandParser::Argument *args, char *response) {
 
 #ifdef USE_MESHTASTIC
 void Command::doMeshtastic(MyCommandParser::Argument *args, char *response) {
-    system->gpioMeshtastic.setState(args[0].asUInt64 == 0);
-    strcpy_P(response, PSTR("Pong!"));
+    system->gpioMeshtastic.setState(args[0].asUInt64 == 1);
+    strcpy_P(response, PSTR("OK!"));
 }
 #endif
 

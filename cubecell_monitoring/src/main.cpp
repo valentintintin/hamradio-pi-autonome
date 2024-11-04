@@ -5,23 +5,18 @@
 
 #ifdef USE_SOFT_SERIAL
 #include <softSerial.h>
-extern softSerial *SerialPi = new softSerial(PIN_PI_TX, PIN_PI_RX);
+softSerial *SerialPi = new softSerial(PIN_PI_TX, PIN_PI_RX);
 #else
-extern HardwareSerial *SerialPi = &Serial1;
+HardwareSerial *SerialPi = &Serial1;
 #endif
-extern JsonWriter serialJsonWriter(SerialPi);
-extern char bufferText[BUFFER_LENGTH]{};
+JsonWriter serialJsonWriter(SerialPi);
+char bufferText[BUFFER_LENGTH]{};
 
 RadioEvents_t radioEvents;
 TimerEvent_t wakeUpEvent;
 
 CubeCell_NeoPixel pixels = CubeCell_NeoPixel(1, RGB, NEO_GRB + NEO_KHZ800);
-#ifdef USE_SCREEN
-SH1107Wire display(0x3c, 500000, SDA, SCL, GEOMETRY_128_64, GPIO10); // addr, freq, sda, scl, resolution, rst
-System systemControl(&display, &pixels, &wakeUpEvent);
-#else
 System systemControl(&pixels, &wakeUpEvent);
-#endif
 Communication communication(&systemControl);
 
 void sentEvent() {
@@ -72,11 +67,6 @@ void setup() {
 #endif
 
     Log.begin(LOG_LEVEL, &Serial);
-
-#ifndef USE_SCREEN
-    // To catch Serial in dev
-    delay(2000);
-#endif
 
     systemControl.begin(&radioEvents);
 }

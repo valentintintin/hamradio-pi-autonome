@@ -27,6 +27,10 @@ public:
     inline float getPressure() const {
         return pressure;
     }
+
+    inline bool hasError() const {
+        return lastUpdateHasError;
+    }
 private:
     System *system;
     Timer timer = Timer(INTERVAL_WEATHER, true);
@@ -36,6 +40,7 @@ private:
     float temperature = 0;
     float humidity = 0;
     float pressure = 0;
+    bool lastUpdateHasError = false;
 };
 
 #endif //CUBECELL_MONITORING_WEATHERSENSORS_H

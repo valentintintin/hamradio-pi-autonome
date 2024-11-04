@@ -22,11 +22,14 @@ bool WeatherSensors::update(bool force) {
 
     timer.restart();
 
-    if (pressure == 0) {
-        system->displayText(PSTR("WEATHER"), PSTR("Failed to fetch weather"), false);
+    if (pressure <= 700 || pressure >= 1200 || temperature >= 50 || temperature <= -15) {
+        lastUpdateHasError = true;
+        Log.warningln(F("[WEATHER] Error ! Temperature: %FC Humidity: %F%% Pressure: %FhPa"), temperature, humidity, pressure);
         system->serialError(PSTR("[WEATHER] Fetch weather error"));
         return false;
     }
+
+    lastUpdateHasError = false;
 
     serialJsonWriter
             .beginObject()
@@ -36,9 +39,7 @@ bool WeatherSensors::update(bool force) {
             .property(F("pressure"), pressure)
             .endObject(); SerialPi->println();
 
-    sprintf_P(bufferText, PSTR("Temperature: %.2fC Humidity: %.2f%% Pressure: %.2fhPa"), temperature, humidity, pressure);
-    Log.infoln(PSTR("[WEATHER] %s"), bufferText);
-    system->displayText(PSTR("Weather"), bufferText);
+    Log.infoln(F("[WEATHER] Temperature: %FC Humidity: %F%% Pressure: %FhPa"), temperature, humidity, pressure);
 
     return true;
 }
