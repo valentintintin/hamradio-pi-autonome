@@ -9,6 +9,7 @@ WeatherThread::WeatherThread(System *system) : MyThread(system, INTERVAL_WEATHER
 bool WeatherThread::init() {
     if (sensor.begin()) {
         for (uint8_t i = 0; i < 3; i++) {
+            delayWdt(150);
             sensor.read_temperature_c(); // To have correct value for first runOnce
         }
         return true;

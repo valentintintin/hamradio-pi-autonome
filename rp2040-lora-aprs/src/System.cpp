@@ -77,21 +77,22 @@ System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(t
 bool System::begin() {
     Log.infoln(F("[SYSTEM] Starting"));
 
-    ledBlink();
-
-    gpioLed.setState(HIGH);
-
-    if (watchdog_caused_reboot()) {
-        Log.errorln(F("[SYSTEM] Watchdog caused reboot"));
-    }
-
-    rtc_init();
-    Wire.begin();
-
 #ifdef USE_WATCHDOG
     rp2040.wdt_begin(8300);
     Log.infoln(F("[SYSTEM] Internal watchdog enabled"));
 #endif
+
+    if (watchdog_caused_reboot()) {
+        Log.errorln(F("[SYSTEM] Watchdog caused reboot"));
+        ledBlink(3, 1000);
+    } else {
+        ledBlink();
+    }
+
+    gpioLed.setState(HIGH);
+
+    rtc_init();
+    Wire.begin();
 
 #ifdef USE_I2C_SLAVE
     I2CSlave::begin(this);

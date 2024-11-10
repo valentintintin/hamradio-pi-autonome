@@ -32,6 +32,7 @@ private:
     static void doGetJson(MyCommandParser::Argument *args, char *response);
     static void doPing(MyCommandParser::Argument *args, char *response);
     static void doGpioOutput(MyCommandParser::Argument *args, char *response);
+    static void doFetch(MyCommandParser::Argument *args, char *response);
 
 #ifdef USE_MESHTASTIC
     static void doMeshtastic(MyCommandParser::Argument *args, char *response);

@@ -23,6 +23,7 @@ Command::Command(System *system) {
     parser.registerCommand(PSTR("json"), PSTR(""), doGetJson);
     parser.registerCommand(PSTR("ping"), PSTR(""), doPing);
     parser.registerCommand(PSTR("gpio"), PSTR("uu"), doGpioOutput);
+    parser.registerCommand(PSTR("fetch"), PSTR(""), doFetch);
 
 #ifdef USE_MESHTASTIC
     parser.registerCommand(PSTR("msh"), PSTR("u"), doMeshtastic);
@@ -133,6 +134,14 @@ void Command::doGpioOutput(MyCommandParser::Argument *args, char *response) {
     strcpy_P(response, PSTR("KO"));
 }
 
+void Command::doFetch(MyCommandParser::Argument *args, char *response) {
+    system->energyThread->run();
+#ifdef USE_WEATHER
+    system->weatherThread.run();
+#endif
+    strcpy_P(response, PSTR("OK"));
+}
+
 void Command::doGetJson(MyCommandParser::Argument *args, char *response) {
     delayWdt(1000);
 
@@ -213,7 +222,7 @@ void Command::doLinuxWatchdog(MyCommandParser::Argument *args, char *response) {
 
 #ifdef USE_RTC
 void Command::doSetTime(MyCommandParser::Argument *args, char *response) {
-    uint64_t epoch = args[0].asUInt64;
+    uint64_t epoch = args[0].asUInt64 + 15;
 
     system->rtc.setEpoch((long long) epoch, true);
     system->setTimeToRtc();

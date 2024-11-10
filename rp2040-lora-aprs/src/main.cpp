@@ -29,8 +29,8 @@ void delayWdt(uint32_t milliseconds) {
     unsigned long elapsedTime = 0;
 
     while (elapsedTime < milliseconds) {
-        if (milliseconds - elapsedTime >= 5000) {
-            delay(5000);
+        if (milliseconds - elapsedTime >= 1000) {
+            delay(1000);
             rp2040.wdt_reset();
         } else {
             delay(milliseconds - elapsedTime);
