@@ -261,9 +261,9 @@ bool Communication::sendPosition(const char* comment) {
 
     aprsPacketTx.type = Position;
 
-    aprsPacketTx.weather.temperatureFahrenheit = system->weatherThread.getTemperature() * 9 / 5 + 32;
-    aprsPacketTx.weather.humidity = system->weatherThread.getHumidity();
-    aprsPacketTx.weather.pressure = system->weatherThread.getPressure();
+    aprsPacketTx.weather.temperatureFahrenheit = (int16_t) (system->weatherThread.getTemperature() * 9.0 / 5.0 + 32);
+    aprsPacketTx.weather.humidity = (int16_t) system->weatherThread.getHumidity();
+    aprsPacketTx.weather.pressure = (int16_t) system->weatherThread.getPressure();
 
     return send();
 }
@@ -319,7 +319,7 @@ void Communication::received(uint8_t * payload, uint16_t size, float rssi, float
                     shouldTx = sendMessage(aprsPacketRx.source, PSTR(""), aprsPacketRx.message.ackToConfirm);
                 }
 
-                bool processCommandResult = system->command.processCommand(aprsPacketRx.message.message);
+                bool processCommandResult = system->command.processCommand(nullptr, aprsPacketRx.message.message);
 
                 shouldTx |= sendMessage(aprsPacketRx.source, processCommandResult ? PSTR("OK") : PSTR("KO"));
             }

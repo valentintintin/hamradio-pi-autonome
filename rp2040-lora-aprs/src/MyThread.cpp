@@ -34,7 +34,7 @@ void MyThread::run() {
         Log.noticeln(F("[%s] Run OK"), ThreadName.c_str());
         lastUpdateHasError = false;
     } else {
-        Log.warningln(F("[%s] Run KO"), ThreadName.c_str());
+        Log.errorln(F("[%s] Run KO"), ThreadName.c_str());
         lastUpdateHasError = true;
     }
 

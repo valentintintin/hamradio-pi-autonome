@@ -43,6 +43,11 @@ bool WatchdogSlaveMpptChg::feed() {
 
 bool WatchdogSlaveMpptChg::setManagedByUser(unsigned long millis) {
     if (millis == 0) {
+        managedByUser = true;
+        return charger->setWatchdogEnable(false);
+    }
+
+    if (millis == 1) {
         managedByUser = false;
         return feed();
     }

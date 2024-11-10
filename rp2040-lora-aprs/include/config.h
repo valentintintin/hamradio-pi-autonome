@@ -19,6 +19,8 @@
 #define TX_OUTPUT_POWER 22
 #define TRX_BUFFER 253 // 256 - 3 because 3 bytes for LoRa APRS
 
+#define MAX_GPIO_USED 10
+
 extern char bufferText[BUFFER_LENGTH];
 
 #endif

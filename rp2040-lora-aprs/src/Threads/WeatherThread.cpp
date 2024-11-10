@@ -7,7 +7,14 @@ WeatherThread::WeatherThread(System *system) : MyThread(system, INTERVAL_WEATHER
 }
 
 bool WeatherThread::init() {
-    return sensor.begin();
+    if (sensor.begin()) {
+        for (uint8_t i = 0; i < 3; i++) {
+            sensor.read_temperature_c(); // To have correct value for first runOnce
+        }
+        return true;
+    }
+
+    return false;
 }
 
 bool WeatherThread::runOnce() {
@@ -17,6 +24,7 @@ bool WeatherThread::runOnce() {
 
     if (pressure <= 700 || pressure >= 1200 || temperature >= 50 || temperature <= -15) {
         Log.warningln(F("[WEATHER] Error ! Temperature: %FC Humidity: %F%% Pressure: %FhPa"), temperature, humidity, pressure);
+        begin();
         return false;
     }
 

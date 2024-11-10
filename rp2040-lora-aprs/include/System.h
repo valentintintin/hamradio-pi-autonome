@@ -28,12 +28,16 @@ public:
     bool begin();
     void loop();
 
+    void setTimeToRtc();
+
     inline bool hasError() {
         return communication.hasError() || weatherThread.hasError() || energyThread->hasError();
     }
 
     EnergyThread *energyThread;
+#ifdef USE_WEATHER
     WeatherThread weatherThread;
+#endif
     WatchdogSlaveLoraTx watchdogSlaveLoraTx;
     SendPositionThread sendPositionThread;
     SendStatusThread sendStatusThread;
@@ -43,8 +47,10 @@ public:
     Command command;
     GpioPin gpioLed;
 
-#if defined(USE_MPPTCHG) || defined(USE_MPPTCHG_WATCHDOG)
+    GpioPin *gpiosPin[MAX_GPIO_USED];
+
     mpptChg mpptChgCharger;
+#if defined(USE_MPPTCHG) || defined(USE_MPPTCHG_WATCHDOG)
 #endif
 #ifdef USE_MPPTCHG_WATCHDOG
     WatchdogSlaveMpptChg *watchdogSlaveMpptChg;
@@ -52,12 +58,12 @@ public:
 
 #ifdef USE_MESHTASTIC
     WatchdogMasterPin *watchdogMeshtastic;
-    GpioPin gpioMeshtastic = GpioPin(MESHTASTIC_PIN);
+    GpioPin gpioMeshtastic = GpioPin(MESHTASTIC_PIN, OUTPUT, false, false, true);
 #endif
 
 #ifdef USE_WATCHDOG_LINUX_BOARD
     WatchdogMasterPin *watchdogLinuxBoard;
-    GpioPin gpioLinuxBoard = GpioPin(LINUX_BOARD_PIN);
+    GpioPin gpioLinuxBoard = GpioPin(LINUX_BOARD_PIN, OUTPUT, false, true);
 #endif
 
 #ifdef USE_RTC

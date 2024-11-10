@@ -25,6 +25,9 @@
 System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(this), communication(this),
                    watchdogSlaveLoraTx(this), sendPositionThread(this), sendStatusThread(this),
                    sendTelemetriesThread(this) {
+    uint8_t gpioI = 0;
+    gpiosPin[gpioI++] = &gpioLed;
+
     threadController.add(new BlinkerThread(this, &gpioLed));
 
 #ifdef USE_MPPTCHG
@@ -57,14 +60,18 @@ System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(t
 #endif
 
 #ifdef USE_WATCHDOG_MESHTASTIC
+    gpiosPin[gpioI++] = &gpioMeshtastic;
     watchdogMeshtastic = new WatchdogMasterPin(this, &gpioMeshtastic, WATCHDOG_MESHTASTIC_TIMEOUT);
     threadController.add(watchdogMeshtastic);
 #endif
 
 #ifdef USE_WATCHDOG_LINUX_BOARD
+    gpiosPin[gpioI++] = &gpioLinuxBoard;
     watchdogLinuxBoard = new WatchdogMasterPin(this, &gpioLinuxBoard, WATCHDOG_LINUX_BOARD_TIMEOUT);
     threadController.add(watchdogLinuxBoard);
 #endif
+
+    gpiosPin[gpioI++] = new GpioPin(12, OUTPUT, false, true);
 }
 
 bool System::begin() {
@@ -75,7 +82,7 @@ bool System::begin() {
     gpioLed.setState(HIGH);
 
     if (watchdog_caused_reboot()) {
-        Log.warningln(F("[SYSTEM] Watchdog caused reboot"));
+        Log.errorln(F("[SYSTEM] Watchdog caused reboot"));
     }
 
     rtc_init();
@@ -90,16 +97,8 @@ bool System::begin() {
     I2CSlave::begin(this);
 #endif
 
-#ifdef USE_MESHTASTIC
-    gpioMeshtastic.setState(true);
-#endif
-
 #ifdef USE_RTC
-    auto epoch = RTClib::now().unixtime();
-    datetime_t datetime;
-    epoch_to_datetime(epoch, &datetime);
-    rtc_set_datetime(&datetime);
-    Log.infoln(F("[SYSTEM] Set internal RTC to date %d/%d/%d %d:%d:%d"), datetime.day, datetime.month, datetime.year, datetime.hour, datetime.min, datetime.sec);
+    setTimeToRtc();
 #endif
 
     communication.begin();
@@ -130,6 +129,9 @@ void System::loop() {
     if (Serial.available()) {
         streamReceived = &Serial;
         Log.traceln(F("Serial USB incoming"));
+    } else if (Serial1.available()) {
+        streamReceived = &Serial1;
+        Log.traceln(F("Serial UART 0 incoming"));
     }
 
     if (streamReceived != nullptr) {
@@ -138,14 +140,24 @@ void System::loop() {
 
         Log.traceln(F("[SERIAL] Received %s"), bufferText);
 
-        command.processCommand(bufferText);
+        command.processCommand(streamReceived, bufferText);
 
         streamReceived->flush();
     } else {
         threadController.run();
     }
 
+    communication.update();
+
     delay(10);
 
     rp2040.wdt_reset();
+}
+
+void System::setTimeToRtc() {
+    auto epoch = RTClib::now().unixtime();
+    datetime_t datetime;
+    epoch_to_datetime(epoch, &datetime);
+    rtc_set_datetime(&datetime);
+    Log.infoln(F("[SYSTEM] Set internal RTC to date %d/%d/%d %d:%d:%d"), datetime.day, datetime.month, datetime.year, datetime.hour, datetime.min, datetime.sec);
 }

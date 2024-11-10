@@ -7,6 +7,7 @@ System systemControl;
 
 void setup() {
     Serial.begin(115200);
+    Serial1.begin(115200);
 
     if (LOG_LEVEL != LOG_LEVEL_INFO) {
         delay(2500); // Wait for serial debug

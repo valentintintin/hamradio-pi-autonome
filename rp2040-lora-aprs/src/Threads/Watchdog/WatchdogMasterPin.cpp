@@ -4,9 +4,7 @@
 #include "System.h"
 #include "utils.h"
 
-WatchdogMasterPin::WatchdogMasterPin(System *system, GpioPin *gpio, unsigned long intervalCheck) : WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN")), gpio(gpio) {
-    gpio->setState(HIGH);
-}
+WatchdogMasterPin::WatchdogMasterPin(System *system, GpioPin *gpio, unsigned long intervalCheck) : WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN")), gpio(gpio) {}
 
 bool WatchdogMasterPin::runOnce() {
     if (millis() < WATCHDOG_TIME_AFTER_BOOT) {
@@ -29,6 +27,11 @@ bool WatchdogMasterPin::runOnce() {
     if (hasFed) {
         hasFed = false;
         Log.traceln(F("[WATCHDOG_PIN_%d] Dog fed"), gpio->getPin());
+        return true;
+    }
+
+    if (!gpio->getState()) {
+        Log.warningln(F("[WATCHDOG_PIN_%d] Dog not fed but pin low"), gpio->getPin());
         return true;
     }
 

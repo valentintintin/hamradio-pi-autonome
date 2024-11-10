@@ -5,7 +5,7 @@
 
 class GpioPin {
 public:
-    explicit GpioPin(pin_size_t pin, PinMode mode = OUTPUT, bool isAdc = false, bool inverted = false);
+    explicit GpioPin(pin_size_t pin, PinMode mode = OUTPUT, bool isAdc = false, bool inverted = false, bool state = false);
     void setState(bool state);
     bool getState();
     uint16_t getValue();

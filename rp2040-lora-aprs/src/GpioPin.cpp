@@ -1,9 +1,13 @@
 #include "GpioPin.h"
 #include "ArduinoLog.h"
 
-GpioPin::GpioPin(pin_size_t pin, PinMode mode, bool isAdc, bool inverted) : pin(pin), mode(mode),
+GpioPin::GpioPin(pin_size_t pin, PinMode mode, bool isAdc, bool inverted, bool state) : pin(pin), mode(mode),
     isAdc(isAdc), inverted(inverted) {
     pinMode(pin, mode);
+
+    if (mode == OUTPUT) {
+        setState(state);
+    }
 }
 
 void GpioPin::setState(bool state) {

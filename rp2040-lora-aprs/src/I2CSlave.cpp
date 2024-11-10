@@ -49,27 +49,27 @@ void I2CSlave::onRequest() {
             break;
 #if defined(USE_ENERGY_DUMMY) || defined(USE_MPPTCHG) || defined(USE_INA3221) || defined(USE_BATTERY_ADC)
         case REG_BATTERY_VOLTAGE:
-            value = I2CSlave::system->energyThread->getVoltageBattery();
+            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getVoltageBattery();
             break;
         case REG_BATTERY_CURRENT:
-            value = I2CSlave::system->energyThread->getCurrentBattery();
+            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getCurrentBattery();
             break;
         case REG_SOLAR_VOLTAGE:
-            value = I2CSlave::system->energyThread->getVoltageSolar();
+            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getVoltageSolar();
             break;
         case REG_SOLAR_CURRENT:
-            value = I2CSlave::system->energyThread->getCurrentSolar();
+            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getCurrentSolar();
             break;
 #endif
 #ifdef USE_WEATHER
         case REG_TEMPERATURE:
-            value = (int16_t) (I2CSlave::system->weatherThread.getTemperature() * 100.0);
+            value = I2CSlave::system->weatherThread.hasError() ? 0 : (int16_t) (I2CSlave::system->weatherThread.getTemperature() * 100.0);
             break;
         case REG_PRESSURE:
-            value = (int16_t) I2CSlave::system->weatherThread.getPressure();
+            value = I2CSlave::system->weatherThread.hasError() ? 0 : (int16_t) I2CSlave::system->weatherThread.getPressure();
             break;
         case REG_HUMIDITY:
-            value = (int16_t) I2CSlave::system->weatherThread.getHumidity();
+            value = I2CSlave::system->weatherThread.hasError() ? 0 : (int16_t) I2CSlave::system->weatherThread.getHumidity();
             break;
 #endif
 #ifdef USE_RTC
