@@ -1,16 +1,14 @@
-#include "Threads/Watchdog/WatchdogMasterPin.h"
+#include "Threads/Watchdog/WatchdogMasterPinThread.h"
 
 #include "ArduinoLog.h"
 #include "System.h"
 #include "utils.h"
 
-WatchdogMasterPin::WatchdogMasterPin(System *system, GpioPin *gpio, unsigned long intervalCheck) : WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN")), gpio(gpio) {}
+WatchdogMasterPinThread::WatchdogMasterPinThread(System *system, GpioPin *gpio, unsigned long intervalCheck, bool enabled):
+WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN"), enabled), gpio(gpio) {
+}
 
-bool WatchdogMasterPin::runOnce() {
-    if (millis() < WATCHDOG_TIME_AFTER_BOOT) {
-        return true;
-    }
-
+bool WatchdogMasterPinThread::runOnce() {
     if (wantToSleep) { // User ask to sleep
         if (gpio->getState()) { // Currently running
             gpio->setState(LOW); // Shutdown
@@ -38,19 +36,20 @@ bool WatchdogMasterPin::runOnce() {
     Log.warningln(F("[WATCHDOG_PIN_%d] Dog not fed so toggle pin"), gpio->getPin());
 
     gpio->setState(LOW);
-    delayWdt(TIME_WAIT_TOGGLE);
+    delayWdt(TIME_WAIT_TOGGLE_WATCHDOG_MASTER);
     gpio->setState(HIGH);
 
     return true;
 }
 
-bool WatchdogMasterPin::feed() {
+bool WatchdogMasterPinThread::feed() {
     Log.infoln(F("[WATCHDOG_PIN_%d] Feed dog"), gpio->getPin());
     hasFed = true;
+    lastFed = millis();
     return true;
 }
 
-void WatchdogMasterPin::sleep(unsigned long millis) {
+void WatchdogMasterPinThread::sleep(uint64_t millis) {
     Log.infoln(F("[WATCHDOG_PIN_%d] Sleep for %ums at next internal (%u)"), gpio->getPin(), millis, interval);
     timerSleep.setInterval(millis);
     wantToSleep = true;

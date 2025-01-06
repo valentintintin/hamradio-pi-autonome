@@ -3,24 +3,24 @@
 #set -e # Stop le programme s'il y a une erreur
 set -x # Affiche les commandes
 
-# Paramètres et variables
-SERIAL_PORT="/dev/ttyS1"                # Port série pour la communication
-SERIAL_BAUDRATE="115200"                    # Débit en bauds
-PHOTO_OUTPUT_DIR="/data"            # Dossier de sortie des photos
-REMOTE_DIR="valentin@192.168.1254:/home/valentin/Data/cameras/opi"  # Dossier distant pour rsync
-SLEEP_DURATION=150                        # Temps de veille (en secondes) si Ethernet non connecté
+SERIAL_PORT="/dev/ttyS1"
+MESHTASTIC_SERIAL_PORT="/dev/ttyS2"
+DATA_OUTPUT_DIR="/mnt/sdcard/data"
+REMOTE_DIR="valentin@192.168.1.254:/home/valentin/Data/cameras/opi"
+SLEEP_DURATION=150
 
 # Fonction pour setup la carte
 startup() {
     echo "Setup de la carte"
     
+    mkdir -p $DATA_OUTPUT_DIR
+    
     # cpu
-    cpufreq-set --governor ondemand
+    cpufreq-set --governor conservative
     
     # configure UART
-    config-pin p9.24 uart
-    config-pin p9.26 uart
-    stty -F /dev/ttyS1 115200
+    stty -F $SERIAL_PORT 115200
+    stty -F $MESHTASTIC_SERIAL_PORT 115200
 
     # configure leds
     echo cpu0 > /sys/class/leds/beaglebone\:green\:usr0/trigger
@@ -28,70 +28,111 @@ startup() {
     echo none > /sys/class/leds/beaglebone\:green\:usr2/trigger
     echo none > /sys/class/leds/beaglebone\:green\:usr3/trigger
     
-    echo 0 > /sys/class/leds/beaglebone\:green\:usr0/brightness
-    echo 0 > /sys/class/leds/beaglebone\:green\:usr1/brightness
-    echo 0 > /sys/class/leds/beaglebone\:green\:usr2/brightness
-    echo 0 > /sys/class/leds/beaglebone\:green\:usr3/brightness
+    sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
+CREATE TABLE IF NOT EXISTS telemetry (
+    uptime INTEGER,
+    voltageBattery INTEGER,
+    currentBattery INTEGER,
+    voltageSolar INTEGER,
+    currentSolar INTEGER,
+    temperatureRtc REAL,
+    temperatureBattery REAL,
+    temperature REAL,
+    humidity REAL,
+    pressure REAL,
+    createdAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS system (
+    cpu INTEGER,
+    ram INTEGER,
+    disk INTEGER,
+    sdcard INTEGER,
+    uptime INTEGER,
+    createdAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS meshtastic (
+    id INTEGER,
+    longName TEXT,
+    shortName TEXT,
+    snr REAL,
+    lastHeard INTEGER,
+    createdAt TEXT
+);
+EOF
 }
 
-# Fonction pour lire et analyser le JSON depuis le port série
 read_json_from_serial() {
     echo "Envoi de la commande sur le port série..."
-    echo -e "COMMAND\n" > "$SERIAL_PORT" # Remplacez "COMMAND" par la commande réelle
-    JSON_RESPONSE=$(cat "$SERIAL_PORT")  # Lecture de la réponse JSON
+    echo -e "json" > "$SERIAL_PORT"
+    JSON_RESPONSE=$(timeout 2s cat "$SERIAL_PORT")
 
-    # Vérification que la réponse est bien du JSON
-    if echo "$JSON_RESPONSE" | jq . > /dev/null 2>&1; then
+    if [ -n "$JSON_RESPONSE" ] && echo "$JSON_RESPONSE" | jq . > /dev/null 2>&1; then
         echo "JSON reçu: $JSON_RESPONSE"
 
-        # Output the JSON
-        echo "$JSON_RESPONSE" > "$PHOTO_OUTPUT_DIR/mcu.json"
+        echo "$JSON_RESPONSE" > "$DATA_OUTPUT_DIR/mcu.json"
+        return 0
     else
         echo "Erreur : Réponse non valide"
+        return 1
     fi
 }
 
-# Fonction pour régler l'heure système depuis un timestamp JSON
 set_system_time() {
-    TIMESTAMP=$(echo "$JSON_RESPONSE" | jq '.date') # Extraction du timestamp
-    echo "Réglage de l'heure du système avec le timestamp : $TIMESTAMP"
-    sudo date -s "@$TIMESTAMP"
+    TIMESTAMP_JSON=$(echo "$JSON_RESPONSE" | jq '.time')
+    echo "Réglage de l'heure du système avec le timestamp : $TIMESTAMP_JSON"
+    sudo date -s "@$TIMESTAMP_JSON"
     sudo hwclock -w -f /dev/rtc0
+    TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
+    date
 }
 
-# Fonction pour capturer une photo avec chaque caméra
+save_telemtry_to_database() {
+    VALUES=$(echo "$JSON_RESPONSE" | jq -r '[.uptime, .energy.voltageBattery, .energy.currentBattery, .energy.voltageSolar, .energy.currentSolar, .box.temperatureRtc, .box.temperatureBattery, .weather.temperature, .weather.humidity, .weather.pressure] | @csv')
+
+    sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
+INSERT INTO telemetry VALUES ($VALUES, '$TIMESTAMP');
+EOF
+}
+
 capture_photos() {
     echo "Capture des photos avec fswebcam pour chaque caméra..."
-    for CAMERA_CONFIG in /path/to/camera_configs/*.conf; do
+    for CAMERA_CONFIG in $DATA_OUTPUT_DIR/../scripts/camera_configs/*.conf; do
         CAMERA_NAME=$(basename "$CAMERA_CONFIG" .conf)
-        TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
-        PHOTO_PATH="$PHOTO_OUTPUT_DIR/${CAMERA_NAME}_${TIMESTAMP}.jpg"
-
-        fswebcam -c "$CAMERA_CONFIG" --save "$PHOTO_PATH"
-        echo "Photo capturée pour la caméra $CAMERA_NAME : $PHOTO_PATH"
+        
+        if [ -e "/dev/v4l/by-id/$CAMERA_NAME" ]; then
+            mkdir -p "$DATA_OUTPUT_DIR/camera/${CAMERA_NAME}"
+            PHOTO_PATH="$DATA_OUTPUT_DIR/camera/${CAMERA_NAME}/${TIMESTAMP}.jpg"
+            fswebcam -c "$CAMERA_CONFIG" --save "$PHOTO_PATH"
+            echo "Photo capturée pour la caméra $CAMERA_NAME : $PHOTO_PATH"
+        else
+            echo "La camera $CAMERA_NAME est introuvable"
+        fi
     done
 }
 
-# Fonction pour générer une image de télémétrie
 generate_telemetry_image() {
-    TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
-    BATTERY_VOLTAGE=$(echo "$JSON_RESPONSE" | jq '.voltageBattery')
-    BATTERY_CURRENT=$(echo "$JSON_RESPONSE" | jq '.currentBattery')
-    PANEL_VOLTAGE=$(echo "$JSON_RESPONSE" | jq '.voltageSolar')
-    PANEL_CURRENT=$(echo "$JSON_RESPONSE" | jq '.currentSolar')
-    TEMPERATURE=$(echo "$JSON_RESPONSE" | jq '.temperature')
-    HUMIDITY=$(echo "$JSON_RESPONSE" | jq '.humidity')
-    PRESSURE=$(echo "$JSON_RESPONSE" | jq '.pressure')
+    DATE=$(date +"%Y-%m-%d %H:%M:%S")
+    BATTERY_VOLTAGE=$(echo "$JSON_RESPONSE" | jq '.energy.voltageBattery')
+    BATTERY_CURRENT=$(echo "$JSON_RESPONSE" | jq '.energy.currentBattery')
+    PANEL_VOLTAGE=$(echo "$JSON_RESPONSE" | jq '.energy.voltageSolar')
+    PANEL_CURRENT=$(echo "$JSON_RESPONSE" | jq '.energy.currentSolar')
+    TEMPERATURE=$(echo "$JSON_RESPONSE" | jq '.weather.temperature')
+    HUMIDITY=$(echo "$JSON_RESPONSE" | jq '.weather.humidity')
+    PRESSURE=$(echo "$JSON_RESPONSE" | jq '.weather.pressure')
 
-    OUTPUT_FILE="$PHOTO_OUTPUT_DIR/telemetry_${TIMESTAMP}.jpg"
+    mkdir -p "$DATA_OUTPUT_DIR/telemetry"
+    OUTPUT_FILE="$DATA_OUTPUT_DIR/telemetry/${TIMESTAMP}.jpg"
 
-    # Exemple de commande ImageMagick, ajustez les variables si nécessaire
+     #-fill lightgray -stroke lightgray -draw "rectangle 85,60 615,85" \
+     #-fill indianred -stroke indianred -draw "rectangle 85,60 85,85" \
+     #-font "Arial.ttf" -pointsize 20 -stroke black -strokewidth 1 -fill black \
+         
     convert -size 700x480 xc:black \
-        -font "/path/to/Arial.ttf" -pointsize 30 -stroke white -strokewidth 1 -fill white \
-        -annotate +185+30 "$TIMESTAMP" \
-        -fill lightgray -stroke lightgray -draw "rectangle 85,60 615,85" \
-        -fill indianred -stroke indianred -draw "rectangle 85,60 85,85" \
-        -font "/path/to/Arial.ttf" -pointsize 20 -stroke black -strokewidth 1 -fill black \
+        -font "Arial.ttf" -pointsize 30 -stroke white -strokewidth 1 -fill white \
+        -annotate +185+30 "$DATE" \
+        -font "Arial.ttf" -pointsize 20 -stroke white -strokewidth 1 -fill white \
         -annotate +135+80 "Tension batterie : ${BATTERY_VOLTAGE} mV" \
         -annotate +15+80 "11000" -annotate +620+80 "13500" \
         -annotate +135+130 "Courant batterie : ${BATTERY_CURRENT} mA" \
@@ -111,58 +152,87 @@ generate_telemetry_image() {
     echo "Image de télémétrie générée : $OUTPUT_FILE"
 }
 
-# Fonction pour vérifier si l'Ethernet est connecté
 check_ethernet_connection() {
-    if ip link show | grep "state UP"; then
+    if ip link | grep "state UP"; then
         return 0  # Connecté
     else
         return 1  # Non connecté
     fi
 }
 
-# Fonction pour synchroniser les images vers le dossier distant
+check_link_connection() {
+    if ip addr | grep "192.168.1." || ip addr | grep "44.151.38."; then
+        return 0  # Connecté
+    else
+        return 1  # Non connecté
+    fi
+}
+
 sync_photos() {
     echo "Synchronisation des photos vers le dossier distant..."
-    rsync -avz "$PHOTO_OUTPUT_DIR/" "$REMOTE_DIR"
+    rsync -avz "$DATA_OUTPUT_DIR/" "$REMOTE_DIR"
 }
 
 save_system_info() {
-    # Get raw CPU percentage
     cpu_percentage=$(top -bn1 | grep "%Cpu(s)" | awk '{printf "%.0f", $2}')
 
-    # Get RAM percentage
     ram_percentage=$(free | grep Mem | awk '{printf "%.0f", (1 - $7/$2) * 100}')
 
-    # Get disk usage percentage
     disk_percentage=$(df -h / | awk 'NR==2 {print $5}' | cut -d'%' -f1)
+    sdcard_percentage=$(df -h /mnt/sdcard | awk 'NR==2 {print $5}' | cut -d'%' -f1)
 
-    # Get uptime in seconds
     uptime_seconds=$(awk '{printf "%.0f", $1}' /proc/uptime)
 
-    # Build JSON output
-    json="{ \"cpu\": $cpu_percentage, \"ram\": $ram_percentage, \"disk\": $disk_percentage, \"uptime\": $uptime_seconds }"
+    json="{ \"cpu\": $cpu_percentage, \"ram\": $ram_percentage, \"disk\": $disk_percentage, \"sdcard\": $sdcard_percentage, \"uptime\": $uptime_seconds }"
 
-    # Output the JSON
-    echo "$json" > "$PHOTO_OUTPUT_DIR/system.json"
+    echo "$json" > "$DATA_OUTPUT_DIR/system.json"
+    
+    VALUES=$(echo "$json" | jq -r '[.cpu, .ram, .disk, .sdcard, .uptime] | @csv')
+
+    sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
+INSERT INTO system VALUES ($VALUES, '$TIMESTAMP');
+EOF
+}
+
+save_meshtastic_nodes() {
+    json=$(meshtastic --port $MESHTASTIC_SERIAL_PORT --info | sed -n '/Nodes in mesh:/,/Preferences:/p' | head -n -2 | sed '1s/.*/{/' | jq 'to_entries[] | {id: .value.user.id, longName: .value.user.longName, shortName: .value.user.shortName, snr: .value.snr, lastHeard: .value.lastHeard, hopsAway: .value.hopsAway''}')
+    
+    echo "$json" > "$DATA_OUTPUT_DIR/meshtastic.json"
+     
+    VALUES=$(echo "$json" | jq -r '[.id, .longName, .shortName, .snr, .lastHeard] | @csv')
+
+    sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
+INSERT INTO meshtastic VALUES ($VALUES, '$TIMESTAMP');
+EOF
 }
 
 startup
 
-# Boucle principale
 while true; do
-    read_json_from_serial            # Lire et traiter le JSON reçu via le port série
-    set_system_time                  # Régler l'heure système à partir du JSON
-    capture_photos                   # Capturer les photos de chaque caméra
-    #generate_telemetry_image         # Générer l'image de télémétrie
-    save_system_info                 # Récupère l'état de la carte
+    TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
+    date
+
+    if read_json_from_serial; then    
+        set_system_time
+        generate_telemetry_image
+    fi
+    
+    capture_photos
+    save_system_info
+    save_meshtastic_nodes
 
     if check_ethernet_connection; then
-        sync_photos                  # Si connecté, synchroniser les photos
+        if check_link_connection; then
+            echo "Liaison OK. On synchronise les fichiers"
+            sync_photos
+        fi
+        date
         sleep $SLEEP_DURATION
     else
         echo "Ethernet non connecté. On attend 10 secondes avant de dormir $SLEEP_DURATION secondes..."
         sleep 10
-        rtcwake -d /dev/rtc0 -m mem -s "$SLEEP_DURATION"      # Sinon, attendre avant de recommencer
+        date
+        rtcwake -d /dev/rtc0 -m mem -s "$SLEEP_DURATION"
     fi
 done
 

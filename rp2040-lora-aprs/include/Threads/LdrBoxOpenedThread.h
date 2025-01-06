@@ -8,11 +8,20 @@ class System;
 
 class LdrBoxOpenedThread : public MyThread {
 public:
-    explicit LdrBoxOpenedThread(System *system, GpioPin *ldr);
+    explicit LdrBoxOpenedThread(System *system);
+
+    inline bool isBoxOpened() const {
+        return _isBoxOpened;
+    }
+
+    inline uint16_t getRawValue() const {
+        return ldr->getValue();
+    }
 protected:
     bool runOnce() override;
 private:
     GpioPin *ldr;
+    bool _isBoxOpened;
 };
 
 

@@ -1,31 +1,31 @@
-#include "Threads/Watchdog/WatchdogSlaveLoraTx.h"
+#include "Threads/Watchdog/WatchdogSlaveLoraTxThread.h"
 
 #include "ArduinoLog.h"
 #include "System.h"
-#include "utils.h"
 
-WatchdogSlaveLoraTx::WatchdogSlaveLoraTx(System *system) : WatchdogThread(system, WATCHDOG_TIME_LORA_TX_OUT, PSTR("WATCHDOG_LORA_TX")) {
+WatchdogSlaveLoraTxThread::WatchdogSlaveLoraTxThread(System *system) : WatchdogThread(system, system->settings.lora.intervalTimeoutWatchdogTx, PSTR("WATCHDOG_LORA_TX")) {
+    enabled = system->settings.lora.watchdogTxEnabled;
 }
 
-bool WatchdogSlaveLoraTx::runOnce() {
-    if (millis() < WATCHDOG_TIME_AFTER_BOOT) {
-        return true;
-    }
-
-    if (hasTx) {
-        hasTx = false;
+bool WatchdogSlaveLoraTxThread::runOnce() {
+    if (hasFed) {
+        hasFed = false;
         Log.traceln(F("[WATCHDOG_LORA_TX] Dog fed"));
         return true;
     }
 
+    if (!system->settings.lora.txEnabled) {
+        return true;
+    }
+
     Log.errorln(F("[WATCHDOG_LORA_TX] No TX for a long time, reboot"));
-    delayWdt(1000);
-    rp2040.reboot();
+    system->planReboot();
     return true;
 }
 
-bool WatchdogSlaveLoraTx::feed() {
+bool WatchdogSlaveLoraTxThread::feed() {
     Log.infoln(F("[WATCHDOG_LORA_TX] Feed dog"));
-    hasTx = true;
+    hasFed = true;
+    lastFed = millis();
     return true;
 }

@@ -2,57 +2,41 @@
 #define CUBECELL_MONITORING_COMMAND_H
 
 #include <CommandParser.h>
-#include "variant.h"
-#include "JsonWriter.h"
-
-#define TIME_WATCHDOG_DFU 60 * 5 // 5 minutes
 
 class System;
 
-typedef CommandParser<16, 2, 16, 250, 0, 32> MyCommandParser;
+//                  COMMANDS, COMMAND_ARGS, COMMAND_NAME_LENGTH, COMMAND_ARG_SIZE, COMMAND_HLP_LENGTH, RESPONSE_SIZE
+typedef CommandParser<32,       2,              16,                     250,                0,              250> MyCommandParser;
 
 class Command {
 public:
     explicit Command(System *system);
-
     bool processCommand(Stream* stream, const char *command);
+
+    char response[MyCommandParser::MAX_RESPONSE_SIZE]{};
 private:
     static System *system;
-    static JsonWriter serialJsonWriter;
 
     MyCommandParser parser;
-    char response[MyCommandParser::MAX_RESPONSE_SIZE]{};
 
     static void doPosition(MyCommandParser::Argument *args, char *response);
     static void doTelemetry(MyCommandParser::Argument *args, char *response);
     static void doTelemetryParams(MyCommandParser::Argument *args, char *response);
     static void doLora(MyCommandParser::Argument *args, char *response);
     static void doReboot(MyCommandParser::Argument *args, char *response);
+    static void doReset(MyCommandParser::Argument *args, char *response);
     static void doDfu(MyCommandParser::Argument *args, char *response);
-    static void doGetJson(MyCommandParser::Argument *args, char *response);
+    static void doPrintJson(MyCommandParser::Argument *args, char *response);
     static void doPing(MyCommandParser::Argument *args, char *response);
     static void doGpioOutput(MyCommandParser::Argument *args, char *response);
-    static void doFetch(MyCommandParser::Argument *args, char *response);
-
-#ifdef USE_MESHTASTIC
-    static void doMeshtastic(MyCommandParser::Argument *args, char *response);
-#endif
-
-#ifdef USE_MPPTCHG_WATCHDOG
+    static void doSetSetting(MyCommandParser::Argument *args, char *response);
+    static void doGetSetting(MyCommandParser::Argument *args, char *response);
     static void doMpptWatchdog(MyCommandParser::Argument *args, char *response);
-#endif
-
-#ifdef USE_MPPTCHG
-    static void doMpptPower(MyCommandParser::Argument *args, char *response);
-#endif
-
-#ifdef USE_WATCHDOG_LINUX_BOARD
     static void doLinuxWatchdog(MyCommandParser::Argument *args, char *response);
-#endif
-
-#ifdef USE_RTC
     static void doSetTime(MyCommandParser::Argument *args, char *response);
-#endif
+    static void doMeshtasticAprs(MyCommandParser::Argument *args, char *response);
+    static void doLinuxAprs(MyCommandParser::Argument *args, char *response);
+    static void doGetLdrAdc(MyCommandParser::Argument *args, char *response);
 };
 
 #endif //CUBECELL_MONITORING_COMMAND_H

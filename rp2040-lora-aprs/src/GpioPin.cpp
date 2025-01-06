@@ -13,7 +13,9 @@ GpioPin::GpioPin(pin_size_t pin, PinMode mode, bool isAdc, bool inverted, bool s
 void GpioPin::setState(bool state) {
     assert(mode == OUTPUT);
 
-    Log.infoln(F("[GPIO_%d] Set %T"), pin, state);
+    if (pin != LED_BUILTIN) {
+        Log.infoln(F("[GPIO_%d] Set %T"), pin, state);
+    }
 
     digitalWrite(pin, inverted == !state);
 
@@ -33,7 +35,7 @@ bool GpioPin::getState() {
         result = !result;
     }
 
-    Log.infoln(F("[GPIO_%d] Get currentState %T"), pin, result);
+    Log.traceln(F("[GPIO_%d] Get currentState %T"), pin, result);
 
     return result;
 }
@@ -44,7 +46,7 @@ uint16_t GpioPin::getValue() {
 
     uint16_t value = analogRead(pin);
 
-    Log.infoln(F("[GPIO_%d] Get value %d"), pin, value);
+    Log.traceln(F("[GPIO_%d] Get value %d"), pin, value);
 
     return value;
 }

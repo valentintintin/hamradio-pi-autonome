@@ -16,11 +16,13 @@ public:
     void update();
     void received(uint8_t * payload, uint16_t size, float rssi, float snr);
 
+    bool sendRaw(const char* raw);
     bool sendMessage(const char* destination, const char* message, const char* ackToConfirm = nullptr);
     bool sendPosition(const char* comment);
     bool sendStatus(const char* comment);
     bool sendTelemetry();
     bool sendTelemetryParams();
+    bool sendItem(const char* name, char symbol, char symbolTable, const char* comment, bool alive = true);
 
     bool shouldSendTelemetryParams = false;
 
@@ -41,8 +43,10 @@ private:
     SX1262 lora = new Module(LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     bool _hasError = false;
 
+    bool startReceive();
     bool send();
     void sent();
+    bool isChannelActive();
 };
 
 #endif //RP2040_LORA_APRS_COMMUNICATION_H

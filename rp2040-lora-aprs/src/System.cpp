@@ -1,123 +1,142 @@
 #include <hardware/rtc.h>
+#include <LittleFS.h>
+
 #include "ArduinoLog.h"
 #include "System.h"
 
-#ifdef USE_MPPTCHG
-    #include "Threads/Energy/EnergyMpptChg.h"
-#elifdef USE_INA3221
-#include "Threads/Energy/EnergyIna3221.h"
-#elifdef USE_BATTERY_ADC
-#include "Threads/Energy/EnergyAdc.h"
-#else
-#include "Threads/Energy/EnergyDummy.h"
-#endif
+#include "Threads/Energy/EnergyMpptChgThread.h"
+#include "Threads/Energy/EnergyIna3221Thread.h"
+#include "Threads/Energy/EnergyAdcThread.h"
+#include "Threads/Energy/EnergyDummyThread.h"
 
 #include "Threads/BlinkerThread.h"
 #include "Threads/LdrBoxOpenedThread.h"
 
-#ifdef USE_I2C_SLAVE
 #include "I2CSlave.h"
 #include "utils.h"
 #include "PicoSleep.h"
 
-#endif
-
-System::System() : gpioLed(GpioPin(LED_BUILTIN)), weatherThread(this), command(this), communication(this),
-                   watchdogSlaveLoraTx(this), sendPositionThread(this), sendStatusThread(this),
-                   sendTelemetriesThread(this) {
-    uint8_t gpioI = 0;
-    gpiosPin[gpioI++] = &gpioLed;
-
-    threadController.add(new BlinkerThread(this, &gpioLed));
-
-#ifdef USE_MPPTCHG
-    energyThread = new EnergyMpptChg(this);
-#elifdef USE_INA3221
-    energyThread = new EnergyIna3221(this, (ina3221_ch_t) INA3221_CHANNEL_BATTERY, (ina3221_ch_t) INA3221_CHANNEL_SOLAR);
-#elifdef USE_BATTERY_ADC
-    energyThread = new EnergyAdc(this, BATTERY_PIN);
-#else
-    energyThread = new EnergyDummy(this);
-#endif
-    threadController.add(energyThread);
-
-#ifdef USE_WEATHER
-    threadController.add(&weatherThread);
-#endif
-
-#ifdef USE_LDR_BOX_OPENED
-    threadController.add(new LdrBoxOpenedThread(this, new GpioPin(LDR_BOX_OPENED_PIN, INPUT)));
-#endif
-
-    threadController.add(&watchdogSlaveLoraTx);
-    threadController.add(&sendPositionThread);
-    threadController.add(&sendStatusThread);
-    threadController.add(&sendTelemetriesThread);
-
-#ifdef USE_MPPTCHG_WATCHDOG
-    watchdogSlaveMpptChg = new WatchdogSlaveMpptChg(this);
-    threadController.add(watchdogSlaveMpptChg);
-#endif
-
-#ifdef USE_WATCHDOG_MESHTASTIC
-    gpiosPin[gpioI++] = &gpioMeshtastic;
-    watchdogMeshtastic = new WatchdogMasterPin(this, &gpioMeshtastic, WATCHDOG_MESHTASTIC_TIMEOUT);
-    threadController.add(watchdogMeshtastic);
-#endif
-
-#ifdef USE_WATCHDOG_LINUX_BOARD
-    gpiosPin[gpioI++] = &gpioLinuxBoard;
-    watchdogLinuxBoard = new WatchdogMasterPin(this, &gpioLinuxBoard, WATCHDOG_LINUX_BOARD_TIMEOUT);
-    threadController.add(watchdogLinuxBoard);
-#endif
-
-    gpiosPin[gpioI++] = new GpioPin(12, OUTPUT, false, true);
+System::System() : command(this), communication(this) {
+    timerReboot.pause();
+    timerDfu.pause();;
 }
 
 bool System::begin() {
     Log.infoln(F("[SYSTEM] Starting"));
 
-#ifdef USE_WATCHDOG
-    rp2040.wdt_begin(8300);
-    Log.infoln(F("[SYSTEM] Internal watchdog enabled"));
-#endif
-
     if (watchdog_caused_reboot()) {
-        Log.errorln(F("[SYSTEM] Watchdog caused reboot"));
-        ledBlink(3, 1000);
+        Log.warningln(F("[SYSTEM] Watchdog caused reboot"));
+        ledBlink(3, 500);
     } else {
         ledBlink();
     }
 
-    gpioLed.setState(HIGH);
+    LittleFS.begin();
+    if (!loadSettings()) {
+        ledBlink(3, 2000);
+    }
+
+//    setDefaultSettings();
+//    saveSettings();
 
     rtc_init();
     Wire.begin();
 
-#ifdef USE_I2C_SLAVE
-    I2CSlave::begin(this);
-#endif
+    uint8_t gpioI = 0;
+    gpiosPin[gpioI++] = &gpioLed;
 
-#ifdef USE_RTC
-    setTimeToRtc();
-#endif
+    threadController.add(new BlinkerThread(this, &gpioLed));
+
+    if (settings.useInternalWatchdog) {
+        rp2040.wdt_begin(8300);
+        Log.infoln(F("[SYSTEM] Internal watchdog enabled"));
+    }
+
+    if (settings.rtc.enabled) {
+        gpiosPin[gpioI++] = new GpioPin(settings.rtc.wakeUpPin, INPUT);
+        auto now = RTClib::now();
+        if (now.year() >= 2024) {
+            setTimeToInternalRtc(now.unixtime());
+        } else {
+            Log.warningln(F("[RTC] Wrong rtc time !"));
+        }
+    }
 
     communication.begin();
+
+    ldrBoxOpenedThread = new LdrBoxOpenedThread(this);
+    threadController.add(ldrBoxOpenedThread);
+
+    switch (settings.energy.type) {
+        case dummy:
+            energyThread = new EnergyDummyThread(this);
+            break;
+        case mpptchg:
+            energyThread = new EnergyMpptChgThread(this);
+            break;
+        case ina:
+            energyThread = new EnergyIna3221Thread(this);
+            break;
+        case adc:
+            energyThread = new EnergyAdcThread(this);
+            break;
+    }
+    threadController.add(energyThread);
+
+    weatherThread = new WeatherThread(this);
+    threadController.add(weatherThread);
+
+    if (settings.meshtastic.i2cSlaveEnabled) {
+        I2CSlave::begin(this);
+    }
+
+    watchdogSlaveMpptChgThread = new WatchdogSlaveMpptChgThread(this);
+    threadController.add(watchdogSlaveMpptChgThread);
+
+    watchdogSlaveLoraTxThread = new WatchdogSlaveLoraTxThread(this);
+    threadController.add(watchdogSlaveLoraTxThread);
+
+    auto *gpioMeshtastic = new GpioPin(settings.meshtastic.pin, OUTPUT, false, false, true);
+    gpiosPin[gpioI++] = gpioMeshtastic;
+    watchdogMeshtastic = new WatchdogMasterPinThread(this, gpioMeshtastic, settings.meshtastic.intervalTimeoutWatchdog, settings.meshtastic.watchdogEnabled);
+    threadController.add(watchdogMeshtastic);
+
+    auto *gpioLinuxBoard = new GpioPin(settings.linux.pin, OUTPUT, false, false, true);
+    gpiosPin[gpioI++] = gpioLinuxBoard;
+    watchdogLinux = new WatchdogMasterPinThread(this, gpioLinuxBoard, settings.linux.intervalTimeoutWatchdog, settings.linux.watchdogEnabled);
+    threadController.add(watchdogLinux);
+
+    gpiosPin[gpioI++] = new GpioPin(settings.linux.nprPin, OUTPUT, false, true);
+    gpiosPin[gpioI++] = new GpioPin(settings.linux.wifiPin, OUTPUT, false, true);
+
+    sendPositionThread = new SendPositionThread(this);
+    threadController.add(sendPositionThread);
+
+    sendStatusThread = new SendStatusThread(this);
+    threadController.add(sendStatusThread);
+
+    sendTelemetriesThread = new SendTelemetriesThread(this);
+    threadController.add(sendTelemetriesThread);
+
+    meshtasticSendAprsThread = new MeshtasticSendAprsThread(this);
+    threadController.add(meshtasticSendAprsThread);
+
+    linuxSendAprsThread = new LinuxSendAprsThread(this);
+    threadController.add(linuxSendAprsThread);
 
     for(int i = 0; i < MAX_THREADS ; i++) {
         auto thread = (MyThread*) threadController.get(i);
         if (thread != nullptr) {
             if (!thread->begin()) {
-                Log.errorln(F("[SYSTEM] Thread init KO"));
-                ledBlink(10);
+                Log.errorln(F("[SYSTEM] Thread %s init KO"), thread->ThreadName.c_str());
                 continue;
             }
 
-            thread->run();
+            if (thread->shouldRun(millis())) {
+                thread->run();
+            }
         }
     }
-
-    gpioLed.setState(LOW);
 
     Log.infoln(F("[SYSTEM] Started"));
 
@@ -133,10 +152,15 @@ void System::loop() {
     } else if (Serial1.available()) {
         streamReceived = &Serial1;
         Log.traceln(F("Serial UART 0 incoming"));
+    } else if (Serial2.available()) {
+        streamReceived = &Serial2;
+        Log.traceln(F("Serial UART 1 incoming"));
     }
 
     if (streamReceived != nullptr) {
-        size_t lineLength = streamReceived->readBytesUntil('\n', bufferText, 150);
+        gpioLed.setState(true);
+
+        size_t lineLength = streamReceived->readBytesUntil('\n', bufferText, BUFFER_LENGTH - 5);
         bufferText[lineLength] = '\0';
 
         Log.traceln(F("[SERIAL] Received %s"), bufferText);
@@ -150,15 +174,387 @@ void System::loop() {
 
     communication.update();
 
+    if (timerPrintJson.hasExpired()) {
+        printJson(true);
+        timerPrintJson.restart();
+    }
+
+    if (timerReboot.hasExpired()) {
+        rp2040.reboot();
+        return;
+    } else if (timerDfu.hasExpired()) {
+        if (watchdogSlaveMpptChgThread->enabled) {
+            watchdogSlaveMpptChgThread->setManagedByUser(TIME_SET_MPPT_WATCHDOG_DFU);
+        }
+
+        rp2040.rebootToBootloader();
+        return;
+    }
+
     delay(10);
 
     rp2040.wdt_reset();
 }
 
-void System::setTimeToRtc() {
-    auto epoch = RTClib::now().unixtime();
+void System::setTimeToInternalRtc(uint32_t unixtime) {
+    auto epoch = unixtime;
     datetime_t datetime;
     epoch_to_datetime(epoch, &datetime);
     rtc_set_datetime(&datetime);
-    Log.infoln(F("[SYSTEM] Set internal RTC to date %d/%d/%d %d:%d:%d"), datetime.day, datetime.month, datetime.year, datetime.hour, datetime.min, datetime.sec);
+    Log.infoln(F("[RTC] Set internal RTC to date %d/%d/%d %d:%d:%d"), datetime.day, datetime.month, datetime.year, datetime.hour, datetime.min, datetime.sec);
+}
+
+bool System::loadSettings() {
+    File file = LittleFS.open("/config.dat", "r");
+    if (!file) {
+        Log.warningln(F("[CONFIG] Fail to open, we create it"));
+
+        setDefaultSettings();
+
+        return saveSettings();
+    }
+
+    file.read((uint8_t*)&settings, sizeof(Settings));
+    file.close();
+
+    Log.infoln(F("[CONFIG] Read correctly"));
+
+    printSettings();
+
+    return true;
+}
+
+bool System::saveSettings() {
+    File file = LittleFS.open("/config.dat", "w");
+    if (!file) {
+        Log.errorln(F("[CONFIG] Fail to save, we use the default one"));
+        printSettings();
+        return false;
+    }
+
+    file.write((uint8_t *) &settings, sizeof(Settings));
+    file.close();
+
+    Log.infoln(F("[CONFIG] Save to FS"));
+
+    return true;
+}
+
+void System::addAprsFrameReceivedToHistory(const AprsPacketLite *packet, const float snr, const float rssi) {
+    uint8_t frameIndex = 0;
+
+    for (auto oldFrame : settings.aprsCallsignsHeard) {
+        if (strcmp(oldFrame.callsign, packet->source) == 0 || strlen(oldFrame.callsign) == 0) {
+            break;
+        }
+
+        frameIndex++;
+    }
+
+    SettingsAprsCallsignHeard *freeFrame = &settings.aprsCallsignsHeard[frameIndex];
+
+    freeFrame->time = getDateTime().unixtime();
+    freeFrame->snr = snr;
+    freeFrame->rssi = rssi;
+    strcpy(freeFrame->callsign, packet->source);
+    strcpy(freeFrame->content, packet->raw);
+
+    saveSettings();
+}
+
+bool System::resetSettings() {
+    if (!LittleFS.remove("/config.dat")) {
+        Log.errorln(F("[CONFIG] Fail to delete"));
+        return false;
+    }
+
+    Log.infoln(F("[CONFIG] Deleted"));
+    planReboot();
+
+    return true;
+}
+
+void System::setDefaultSettings() {
+    settings.useInternalWatchdog = true;
+
+    settings.lora.frequency = 433.775;
+    settings.lora.bandwidth = 125;
+    settings.lora.spreadingFactor = 12;
+    settings.lora.codingRate = 5;
+    settings.lora.outputPower = 12;
+    settings.lora.txEnabled = true;
+    settings.lora.watchdogTxEnabled = true;
+    settings.lora.intervalTimeoutWatchdogTx = 1200000; // 20 minutes
+
+    strcpy_P(settings.aprs.call, PSTR("F4HVV-15"));
+    strcpy_P(settings.aprs.destination, PSTR("APLV1"));
+    strcpy_P(settings.aprs.path, PSTR("WIDE1-1"));
+    settings.aprs.symbol = '#';
+    settings.aprs.symbolTable = 'L';
+    settings.aprs.latitude = 45.325776;
+    settings.aprs.longitude = 5.6365808;
+    settings.aprs.altitude = 830;
+    settings.aprs.comment[0] = '\0';
+    strcpy_P(settings.aprs.status, PSTR("Solaire Digi LoRa APRS"));
+    settings.aprs.positionWeatherEnabled = true;
+    settings.aprs.intervalPositionWeather = 360000; // 60 minutes
+    settings.aprs.telemetryEnabled = true;
+    settings.aprs.telemetryInPosition = true;
+    settings.aprs.intervalTelemetry = 900000; // 15 minutes
+    settings.aprs.statusEnabled = true;
+    settings.aprs.intervalStatus = 86400000; // 1 day
+    settings.aprs.digipeaterEnabled = true;
+
+    settings.meshtastic.watchdogEnabled = true;
+    settings.meshtastic.intervalTimeoutWatchdog = 300000; // 5 minutes
+    settings.meshtastic.pin = 10;
+    settings.meshtastic.i2cSlaveEnabled = true;
+    settings.meshtastic.i2cSlaveAddress = 0x11;
+    settings.meshtastic.aprsSendItemEnabled = true;
+    settings.meshtastic.intervalSendItem = 3600000; // 1 hour
+    strcpy_P(settings.meshtastic.itemName, PSTR("MSH"));
+    settings.meshtastic.symbol = '#';
+    settings.meshtastic.symbolTable = '\\';
+    strcpy_P(settings.meshtastic.itemComment, PSTR("Meshtastic LongModerate 868.4625"));
+
+    settings.mpptWatchdog.enabled = true;
+    settings.mpptWatchdog.timeout = 90; // 1,5 minutes
+    settings.mpptWatchdog.timeOff = 10; // 10 seconds
+    settings.mpptWatchdog.intervalFeed = 30000; // 30 seconds
+
+    settings.energy.intervalCheck = 30000; // 30 seconds
+    settings.energy.type = mpptchg;
+    settings.energy.mpptPowerOffVoltage = 11000;
+    settings.energy.mpptPowerOnVoltage = 11200;
+
+    settings.weather.enabled = true;
+    settings.weather.intervalCheck = 30000; // 30 seconds
+
+    settings.linux.watchdogEnabled = false;
+    settings.linux.intervalTimeoutWatchdog = 300000; // 5 minutes
+    settings.linux.pin = 19;
+    settings.linux.nprPin = 12;
+    settings.linux.wifiPin = 11;
+    settings.linux.aprsSendItemEnabled = true;
+    settings.linux.intervalSendItem = 3600000; // 1 hour
+    strcpy_P(settings.linux.itemName, PSTR("CAMIP"));
+    settings.linux.symbol = 'I';
+    settings.linux.symbolTable = '/';
+    strcpy_P(settings.linux.itemComment, PSTR("Cameras IP f4hvv.pixel-server.ovh"));
+
+    settings.rtc.enabled = true;
+    settings.rtc.wakeUpPin = 6;
+
+    settings.boxOpened.enabled = true;
+    settings.boxOpened.pin = 7;
+    settings.boxOpened.intervalCheck = 120000; // 2 minutes
+}
+
+DateTime System::getDateTime() const {
+    datetime_t datetime;
+    if (settings.rtc.enabled) {
+        rtc_get_datetime(&datetime);
+    }
+
+    return DateTime(datetime.year + 1900, datetime.month, datetime.day, datetime.hour, datetime.min, datetime.sec);
+}
+
+void System::printSettings() {
+    Log.traceln(F("[CONFIG] lora.frequency = %F"), settings.lora.frequency);
+    Log.traceln(F("[CONFIG] lora.bandwidth = %u"), settings.lora.bandwidth);
+    Log.traceln(F("[CONFIG] lora.spreadingFactor = %u"), settings.lora.spreadingFactor);
+    Log.traceln(F("[CONFIG] lora.codingRate = %u"), settings.lora.codingRate);
+    Log.traceln(F("[CONFIG] lora.outputPower = %u"), settings.lora.outputPower);
+    Log.traceln(F("[CONFIG] lora.txEnabled = %T"), settings.lora.txEnabled);
+    Log.traceln(F("[CONFIG] lora.watchdogTxEnabled = %T"), settings.lora.watchdogTxEnabled);
+    Log.traceln(F("[CONFIG] lora.intervalTimeoutWatchdogTx = %u"), settings.lora.intervalTimeoutWatchdogTx);
+
+    Log.traceln(F("[CONFIG] aprs.call = %s"), settings.aprs.call);
+    Log.traceln(F("[CONFIG] aprs.destination = %s"), settings.aprs.destination);
+    Log.traceln(F("[CONFIG] aprs.path = %s"), settings.aprs.path);
+    Log.traceln(F("[CONFIG] aprs.comment = %s"), settings.aprs.comment);
+    Log.traceln(F("[CONFIG] aprs.status = %s"), settings.aprs.status);
+    Log.traceln(F("[CONFIG] aprs.symbol = %c"), settings.aprs.symbol);
+    Log.traceln(F("[CONFIG] aprs.symbolTable = %c"), settings.aprs.symbolTable);
+    Log.traceln(F("[CONFIG] aprs.latitude = %D"), settings.aprs.latitude);
+    Log.traceln(F("[CONFIG] aprs.longitude = %D"), settings.aprs.longitude);
+    Log.traceln(F("[CONFIG] aprs.altitude = %u"), settings.aprs.altitude);
+    Log.traceln(F("[CONFIG] aprs.digipeaterEnabled = %T"), settings.aprs.digipeaterEnabled);
+    Log.traceln(F("[CONFIG] aprs.telemetryEnabled = %T"), settings.aprs.telemetryEnabled);
+    Log.traceln(F("[CONFIG] aprs.intervalTelemetry = %u"), settings.aprs.intervalTelemetry);
+    Log.traceln(F("[CONFIG] aprs.statusEnabled = %T"), settings.aprs.statusEnabled);
+    Log.traceln(F("[CONFIG] aprs.intervalStatus = %u"), settings.aprs.intervalStatus);
+    Log.traceln(F("[CONFIG] aprs.positionWeatherEnabled = %T"), settings.aprs.positionWeatherEnabled);
+    Log.traceln(F("[CONFIG] aprs.intervalPositionWeather = %u"), settings.aprs.intervalPositionWeather);
+    Log.traceln(F("[CONFIG] aprs.telemetryInPosition = %d"), settings.aprs.telemetryInPosition);
+
+    Log.traceln(F("[CONFIG] meshtastic.watchdogEnabled = %T"), settings.meshtastic.watchdogEnabled);
+    Log.traceln(F("[CONFIG] meshtastic.intervalTimeoutWatchdog = %u"), settings.meshtastic.intervalTimeoutWatchdog);
+    Log.traceln(F("[CONFIG] meshtastic.pin = %u"), settings.meshtastic.pin);
+    Log.traceln(F("[CONFIG] meshtastic.i2cSlaveEnabled = %T"), settings.meshtastic.i2cSlaveEnabled);
+    Log.traceln(F("[CONFIG] meshtastic.i2cSlaveAddress = %X"), settings.meshtastic.i2cSlaveAddress);
+    Log.traceln(F("[CONFIG] meshtastic.aprsSendItemEnabled = %T"), settings.meshtastic.aprsSendItemEnabled);
+    Log.traceln(F("[CONFIG] meshtastic.intervalSendItem = %u"), settings.meshtastic.intervalSendItem);
+    Log.traceln(F("[CONFIG] meshtastic.itemName = %s"), settings.meshtastic.itemName);
+    Log.traceln(F("[CONFIG] meshtastic.itemComment = %s"), settings.meshtastic.itemComment);
+    Log.traceln(F("[CONFIG] meshtastic.symbol = %c"), settings.meshtastic.symbol);
+    Log.traceln(F("[CONFIG] meshtastic.symbolTable = %c"), settings.meshtastic.symbolTable);
+
+    Log.traceln(F("[CONFIG] mpptWatchdog.enabled = %T"), settings.mpptWatchdog.enabled);
+    Log.traceln(F("[CONFIG] mpptWatchdog.timeout = %u"), settings.mpptWatchdog.timeout);
+    Log.traceln(F("[CONFIG] mpptWatchdog.intervalFeed = %u"), settings.mpptWatchdog.intervalFeed);
+    Log.traceln(F("[CONFIG] mpptWatchdog.timeOff = %u"), settings.mpptWatchdog.timeOff);
+
+    Log.traceln(F("[CONFIG] boxOpened.enabled = %T"), settings.boxOpened.enabled);
+    Log.traceln(F("[CONFIG] boxOpened.intervalCheck = %u"), settings.boxOpened.intervalCheck);
+    Log.traceln(F("[CONFIG] boxOpened.pin = %u"), settings.boxOpened.pin);
+
+    Log.traceln(F("[CONFIG] weather.enabled = %T"), settings.weather.enabled);
+    Log.traceln(F("[CONFIG] weather.intervalCheck = %u"), settings.weather.intervalCheck);
+
+    Log.traceln(F("[CONFIG] energy.intervalCheck = %u"), settings.energy.intervalCheck);
+    Log.traceln(F("[CONFIG] energy.type = %d"), settings.energy.type);
+    Log.traceln(F("[CONFIG] energy.adcPin = %u"), settings.energy.adcPin);
+    Log.traceln(F("[CONFIG] energy.inaChannelBattery = %u"), settings.energy.inaChannelBattery);
+    Log.traceln(F("[CONFIG] energy.inaChannelSolar = %u"), settings.energy.inaChannelSolar);
+    Log.traceln(F("[CONFIG] energy.mpptPowerOnVoltage = %u"), settings.energy.mpptPowerOnVoltage);
+    Log.traceln(F("[CONFIG] energy.mpptPowerOffVoltage = %u"), settings.energy.mpptPowerOffVoltage);
+
+    Log.traceln(F("[CONFIG] linux.watchdogEnabled = %T"), settings.linux.watchdogEnabled);
+    Log.traceln(F("[CONFIG] linux.intervalTimeoutWatchdog = %u"), settings.linux.intervalTimeoutWatchdog);
+    Log.traceln(F("[CONFIG] linux.pin = %u"), settings.linux.pin);
+    Log.traceln(F("[CONFIG] linux.nprPin = %u"), settings.linux.nprPin);
+    Log.traceln(F("[CONFIG] linux.wifiPin = %u"), settings.linux.wifiPin);
+    Log.traceln(F("[CONFIG] linux.aprsSendItemEnabled = %T"), settings.linux.aprsSendItemEnabled);
+    Log.traceln(F("[CONFIG] linux.intervalSendItem = %lu"), settings.linux.intervalSendItem);
+    Log.traceln(F("[CONFIG] linux.itemName = %s"), settings.linux.itemName);
+    Log.traceln(F("[CONFIG] linux.itemComment = %s"), settings.linux.itemComment);
+    Log.traceln(F("[CONFIG] linux.symbol = %c"), settings.linux.symbol);
+    Log.traceln(F("[CONFIG] linux.symbolTable = %c"), settings.linux.symbolTable);
+
+    Log.traceln(F("[CONFIG] rtc.enabled = %T"), settings.rtc.enabled);
+    Log.traceln(F("[CONFIG] rtc.wakeUpPin = %u"), settings.rtc.wakeUpPin);
+
+    Log.traceln(F("[CONFIG] useInternalWatchdog = %T"), settings.useInternalWatchdog);
+
+    uint8_t frameIndex = 0;
+    for (auto frame : settings.aprsCallsignsHeard) {
+        if (strlen(frame.callsign) > 0) {
+            Log.traceln(F("[CONFIG] APRS Frame received #%d at %u from %s with SNR %F and RSSI %F, content: %s"), frameIndex++, frame.time, frame.callsign, frame.snr, frame.rssi, frame.content);
+        }
+    }
+}
+
+void System::planReboot() {
+    Log.warningln(F("[SYSTEM] Plan reboot"));
+    timerReboot.restart();
+}
+
+void System::planDfu() {
+    Log.warningln(F("[SYSTEM] Plan DFU"));
+    timerDfu.restart();
+}
+
+void System::printJson(bool onUsb) {
+    int16_t temperatureBattery = 0;
+
+    if (settings.energy.type == mpptchg && !mpptChgCharger.getIndexedValue(VAL_INT_TEMP, &temperatureBattery)) {
+        Log.warningln(F("[COMMAND] Impossible to get MPPT Temperature"));
+    }
+
+    JsonWriter *jsonWriter = onUsb ? (isSlowClock ? &serialLowPowerJsonWriter : &serialJsonWriter) : &serialLinuxJsonWriter;
+
+    auto json = jsonWriter->beginObject()
+            .property(F("uptime"), millis() / 1000)
+            .property(F("time"), getDateTime().unixtime())
+            .beginObject(F("errors"))
+                .property(F("lora"), communication.hasError())
+                .property(F("energy"), energyThread->hasError())
+                .property(F("weather"), weatherThread->hasError())
+            .endObject()
+            .beginObject(F("energy"))
+                .property(F("nextRun"), (uint32_t) energyThread->timeBeforeRun() / 1000)
+                .property(F("voltageBattery"), energyThread->hasError() ? 0 : energyThread->getVoltageBattery())
+                .property(F("currentBattery"), energyThread->hasError() ? 0 : energyThread->getCurrentBattery())
+                .property(F("voltageSolar"), energyThread->hasError() ? 0 : energyThread->getVoltageSolar())
+                .property(F("currentSolar"), energyThread->hasError() ? 0 : energyThread->getCurrentBattery())
+            .endObject()
+            .beginObject(F("box"))
+                .property(F("temperatureRtc"), settings.rtc.enabled ? rtc.getTemperature() : 0)
+                .property(F("temperatureBattery"), settings.energy.type == mpptchg && !energyThread->hasError() ? temperatureBattery / 10.0 : 0)
+                .property(F("opened"), ldrBoxOpenedThread->isBoxOpened())
+            .endObject()
+            .beginObject(F("weather"))
+                .property(F("nextRun"), (uint32_t) weatherThread->timeBeforeRun() / 1000)
+                .property(F("temperature"), weatherThread->enabled && !weatherThread->hasError() ? weatherThread->getTemperature() : 0)
+                .property(F("humidity"), weatherThread->enabled && !weatherThread->hasError() ? weatherThread->getHumidity() : 0)
+                .property(F("pressure"), weatherThread->enabled && !weatherThread->hasError() ? weatherThread->getPressure() : 0)
+            .endObject()
+            .beginObject(F("aprsSender"))
+                .property(F("sendPositionNextRun"), (uint32_t) sendPositionThread->timeBeforeRun() / 1000)
+                .property(F("sendTelemetriesNextRun"), (uint32_t) sendTelemetriesThread->timeBeforeRun() / 1000)
+                .property(F("sendStatusNextRun"), (uint32_t) sendStatusThread->timeBeforeRun() / 1000)
+                .property(F("meshtasticSendNextRun"), (uint32_t) meshtasticSendAprsThread->timeBeforeRun() / 1000)
+                .property(F("linuxSendNextRun"), (uint32_t) linuxSendAprsThread->timeBeforeRun() / 1000)
+            .endObject()
+            .beginObject(F("watchdog"))
+                .beginObject(F("mppt"))
+                    .property(F("nextRun"), (uint32_t) watchdogSlaveMpptChgThread->timeBeforeRun() / 1000)
+                    .property(F("lastFed"), (uint32_t) watchdogSlaveMpptChgThread->timeSinceFed() / 1000)
+                .endObject()
+                .beginObject(F("loraTx"))
+                    .property(F("nextRun"), (uint32_t) watchdogSlaveLoraTxThread->timeBeforeRun() / 1000)
+                    .property(F("lastFed"), (uint32_t) watchdogSlaveLoraTxThread->timeSinceFed() / 1000)
+                .endObject()
+                .beginObject(F("meshtastic"))
+                    .property(F("nextRun"), (uint32_t) watchdogMeshtastic->timeBeforeRun() / 1000)
+                    .property(F("lastFed"), (uint32_t) watchdogMeshtastic->timeSinceFed() / 1000)
+                .endObject()
+                .beginObject(F("linux"))
+                    .property(F("nextRun"), (uint32_t) watchdogLinux->timeBeforeRun() / 1000)
+                    .property(F("lastFed"), (uint32_t) watchdogLinux->timeSinceFed() / 1000)
+                .endObject()
+            .endObject()
+            .beginArray(F("aprsReceived"));
+
+    uint8_t frameIndex = 0;
+    for (auto frame : settings.aprsCallsignsHeard) {
+        if (strlen(frame.callsign) > 0) {
+            if (frameIndex++ > 0) {
+                json.separator();
+            }
+
+            json.beginObject()
+            .property(F("callsign"), frame.callsign)
+                .property(F("time"), frame.time)
+                .property(F("packet"), frame.content)
+                .property(F("snr"), frame.snr)
+                .property(F("rssi"), frame.rssi)
+            .endObject();
+        }
+    }
+
+    json.endArray().endObject();
+
+    if (onUsb) {
+        Serial.println();
+    }
+}
+
+void System::setSlowClock() {
+    isSlowClock = true;
+}
+
+GpioPin *System::getGpio(uint8_t pin) {
+    for (auto gpio : gpiosPin) {
+        if (gpio == nullptr) {
+            continue;
+        }
+
+        if (gpio->getPin() == pin) {
+            return gpio;
+        }
+    }
+
+    return nullptr;
 }

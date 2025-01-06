@@ -5,7 +5,6 @@
 #include "MyThread.h"
 #include "GpioPin.h"
 
-
 class BlinkerThread : public MyThread {
 public:
     explicit BlinkerThread(System *system, GpioPin *gpio);

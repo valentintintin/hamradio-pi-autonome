@@ -1,6 +1,5 @@
 #include <hardware/rtc.h>
 #include "I2CSlave.h"
-#include "variant.h"
 #include "System.h"
 
 #include "ArduinoLog.h"
@@ -21,77 +20,77 @@ void I2CSlave::begin(System *system) {
         return;
     }
 
-    Wire1.begin(I2C_SLAVE_ADDRESS);
+    auto address = system->settings.meshtastic.i2cSlaveAddress;
+
+    Wire1.begin(address);
     Wire1.onRequest(onRequest);
     Wire1.onReceive(onReceive);
 
-    Log.infoln(F("[I2C_SLAVE] Begin on address %x and pin SDA 2, SCL 3"), I2C_SLAVE_ADDRESS);
+    Log.infoln(F("[I2C_SLAVE] Begin on address %x and pin SDA 2, SCL 3"), address);
+}
+
+void I2CSlave::end() {
+    Log.infoln(F("[I2C_SLAVE] Stopped"));
+    Wire1.end();
 }
 
 void I2CSlave::onRequest() {
+    Settings settings = system->settings;
     uint32_t value = 0;
-#ifdef USE_RTC
-    datetime_t datetime;
-    rtc_get_datetime(&datetime);
-#endif
+
+    DateTime datetime = system->getDateTime();
 
     switch (currentRegToRead) {
         case REG_PING:
-#if defined(USE_ENERGY_DUMMY) || defined(USE_MPPTCHG) || defined(USE_INA3221) || defined(USE_BATTERY_ADC)
-    value += HAS_POWER;
-#endif
-#ifdef USE_WEATHER
-    value += HAS_WEATHER;
-#endif
-#ifdef USE_RTC
-    value += HAS_RTC;
-#endif
+            value += HAS_POWER;
+
+            if (system->weatherThread->enabled) {
+                value += HAS_WEATHER;
+            }
+
+            if (settings.rtc.enabled) {
+                value += HAS_RTC;
+            }
             break;
-#if defined(USE_ENERGY_DUMMY) || defined(USE_MPPTCHG) || defined(USE_INA3221) || defined(USE_BATTERY_ADC)
         case REG_BATTERY_VOLTAGE:
-            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getVoltageBattery();
+            value = !system->energyThread->hasError() ? system->energyThread->getVoltageBattery() : 0;
             break;
         case REG_BATTERY_CURRENT:
-            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getCurrentBattery();
+            value = !system->energyThread->hasError() ? system->energyThread->getCurrentBattery() : 0;
             break;
         case REG_SOLAR_VOLTAGE:
-            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getVoltageSolar();
+            value = !system->energyThread->hasError() ? system->energyThread->getVoltageSolar() : 0;
             break;
         case REG_SOLAR_CURRENT:
-            value = I2CSlave::system->energyThread->hasError() ? 0 : I2CSlave::system->energyThread->getCurrentSolar();
+            value = !system->energyThread->hasError() ? system->energyThread->getCurrentSolar() : 0;
             break;
-#endif
-#ifdef USE_WEATHER
         case REG_TEMPERATURE:
-            value = I2CSlave::system->weatherThread.hasError() ? 0 : (int16_t) (I2CSlave::system->weatherThread.getTemperature() * 100.0);
+            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? (int16_t) (system->weatherThread->getTemperature() * 100.0) : 0;
             break;
         case REG_PRESSURE:
-            value = I2CSlave::system->weatherThread.hasError() ? 0 : (int16_t) I2CSlave::system->weatherThread.getPressure();
+            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? (int16_t) system->weatherThread->getPressure() : 0;
             break;
         case REG_HUMIDITY:
-            value = I2CSlave::system->weatherThread.hasError() ? 0 : (int16_t) I2CSlave::system->weatherThread.getHumidity();
+            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? (int16_t) system->weatherThread->getHumidity() : 0;
             break;
-#endif
-#ifdef USE_RTC
         case REG_SECONDS:
-            value = (uint8_t) datetime.sec;
+            value = datetime.second();
             break;
         case REG_MINUTES:
-            value = (uint8_t) datetime.min;
+            value = datetime.minute();
             break;
         case REG_HOURS:
-            value = (uint8_t) datetime.hour;
+            value = datetime.hour();
             break;
         case REG_DAYS:
-            value = (uint8_t) datetime.day;
+            value = datetime.day();
             break;
         case REG_MONTHS:
-            value = (uint8_t) datetime.month;
+            value = datetime.month();
             break;
         case REG_YEARS:
-            value = datetime.year + 1900;
+            value = datetime.year();
             break;
-#endif
         default:
             Log.warningln(F("[I2C_SLAVE] Register %x not found"), currentRegToRead);
             break;
@@ -111,8 +110,8 @@ void I2CSlave::onReceive(int bytes) {
         currentRegToRead = Wire1.read();
         Log.traceln(F("[I2C_SLAVE] Receive value %x to read"), currentRegToRead);
 
-#ifdef USE_WATCHDOG_MESHTASTIC
-        system->watchdogMeshtastic->feed();
-#endif
+        if (system->watchdogMeshtastic->enabled) {
+            system->watchdogMeshtastic->feed();
+        }
     }
 }

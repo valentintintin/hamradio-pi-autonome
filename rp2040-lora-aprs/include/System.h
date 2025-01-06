@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <ThreadController.h>
 #include <DS3231.h>
+#include <JsonWriter.h>
 
 #include "Communication.h"
 #include "Timer.h"
@@ -12,14 +13,17 @@
 #include "GpioPin.h"
 #include "Threads/EnergyThread.h"
 #include "Threads/WeatherThread.h"
-#include "Threads/Watchdog/WatchdogSlaveMpptChg.h"
-#include "Threads/Watchdog/WatchdogSlaveLoraTx.h"
-#include "Threads/Watchdog/WatchdogMasterPin.h"
+#include "Threads/Watchdog/WatchdogSlaveMpptChgThread.h"
+#include "Threads/Watchdog/WatchdogSlaveLoraTxThread.h"
+#include "Threads/Watchdog/WatchdogMasterPinThread.h"
 #include "Threads/Send/SendPositionThread.h"
 #include "Threads/Send/SendStatusThread.h"
 #include "Threads/Send/SendTelemetriesThread.h"
 
-#include "variant.h"
+#include "Settings.h"
+#include "Threads/LdrBoxOpenedThread.h"
+#include "Threads/Send/MeshtasticSendAprsThread.h"
+#include "Threads/Send/LinuxSendAprsThread.h"
 
 class System {
 public:
@@ -28,49 +32,60 @@ public:
     bool begin();
     void loop();
 
-    void setTimeToRtc();
+    void setSlowClock();
+    void setTimeToInternalRtc(uint32_t unixtime);
+    bool resetSettings();
+    bool saveSettings();
+    void addAprsFrameReceivedToHistory(const AprsPacketLite *packet, float snr, float rssi);
+    void planReboot();
+    void planDfu();
+    void printSettings();
+    void printJson(bool onUsb);
+    GpioPin* getGpio(uint8_t pin);
+    DateTime getDateTime() const;
 
-    inline bool hasError() {
-        return communication.hasError() || weatherThread.hasError() || energyThread->hasError();
+    inline bool hasError() const {
+        return communication.hasError() || weatherThread->hasError() || energyThread->hasError();
     }
 
-    EnergyThread *energyThread;
-#ifdef USE_WEATHER
-    WeatherThread weatherThread;
-#endif
-    WatchdogSlaveLoraTx watchdogSlaveLoraTx;
-    SendPositionThread sendPositionThread;
-    SendStatusThread sendStatusThread;
-    SendTelemetriesThread sendTelemetriesThread;
+    Settings settings{};
+
+    LdrBoxOpenedThread *ldrBoxOpenedThread{};
+    EnergyThread *energyThread{};
+    WeatherThread *weatherThread{};
+
+    WatchdogSlaveLoraTxThread *watchdogSlaveLoraTxThread{};
+    SendPositionThread *sendPositionThread{};
+    SendStatusThread *sendStatusThread{};
+    SendTelemetriesThread *sendTelemetriesThread{};
+    MeshtasticSendAprsThread *meshtasticSendAprsThread{};
+    LinuxSendAprsThread *linuxSendAprsThread{};
 
     Communication communication;
     Command command;
-    GpioPin gpioLed;
-
-    GpioPin *gpiosPin[MAX_GPIO_USED];
+    GpioPin gpioLed = GpioPin(LED_BUILTIN);
+    GpioPin *gpiosPin[MAX_GPIO_USED]{};
 
     mpptChg mpptChgCharger;
-#if defined(USE_MPPTCHG) || defined(USE_MPPTCHG_WATCHDOG)
-#endif
-#ifdef USE_MPPTCHG_WATCHDOG
-    WatchdogSlaveMpptChg *watchdogSlaveMpptChg;
-#endif
 
-#ifdef USE_MESHTASTIC
-    WatchdogMasterPin *watchdogMeshtastic;
-    GpioPin gpioMeshtastic = GpioPin(MESHTASTIC_PIN, OUTPUT, false, false, true);
-#endif
+    WatchdogSlaveMpptChgThread *watchdogSlaveMpptChgThread{};
 
-#ifdef USE_WATCHDOG_LINUX_BOARD
-    WatchdogMasterPin *watchdogLinuxBoard;
-    GpioPin gpioLinuxBoard = GpioPin(LINUX_BOARD_PIN, OUTPUT, false, true);
-#endif
+    WatchdogMasterPinThread *watchdogMeshtastic{};
+    WatchdogMasterPinThread *watchdogLinux{};
 
-#ifdef USE_RTC
     DS3231 rtc;
-#endif
 private:
+    bool isSlowClock;
     ThreadController threadController;
+    Timer timerDfu = Timer(TIME_BEFORE_REBOOT);
+    Timer timerReboot = Timer(TIME_BEFORE_REBOOT);
+    Timer timerPrintJson = Timer(INTERVAL_PRINT_JSON_USB, true);
+    JsonWriter serialJsonWriter = JsonWriter(&Serial);
+    JsonWriter serialLinuxJsonWriter = JsonWriter(&Serial1);
+    JsonWriter serialLowPowerJsonWriter = JsonWriter(&Serial2);
+
+    bool loadSettings();
+    void setDefaultSettings();
 };
 
 #endif //RP2040_LORA_APRS_SYSTEM_H

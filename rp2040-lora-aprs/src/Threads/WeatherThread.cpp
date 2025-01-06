@@ -3,7 +3,9 @@
 #include "System.h"
 #include "utils.h"
 
-WeatherThread::WeatherThread(System *system) : MyThread(system, INTERVAL_WEATHER, PSTR("WEATHER")) {
+WeatherThread::WeatherThread(System *system) : MyThread(system, system->settings.weather.intervalCheck, PSTR("WEATHER")) {
+    enabled = system->settings.weather.enabled;
+    force = true;
 }
 
 bool WeatherThread::init() {

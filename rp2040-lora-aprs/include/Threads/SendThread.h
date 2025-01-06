@@ -7,14 +7,11 @@ class System;
 
 class SendThread : public MyThread {
 public:
-    explicit SendThread(System *system, unsigned long interval, const char *name);
+    explicit SendThread(System *system, unsigned long interval, const char *name, bool enabled);
+
     bool shouldRun(unsigned long time) override;
-    void forceRun();
 protected:
-    bool runOnce() override;
-    virtual bool send() = 0;
-private:
-    bool force = false;
+    virtual bool runOnce() override = 0;
 };
 
 #endif //RP2040_LORA_APRS_SENDTHREAD_H

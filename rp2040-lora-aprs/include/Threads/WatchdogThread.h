@@ -3,14 +3,24 @@
 
 #include "MyThread.h"
 
-#define WATCHDOG_TIME_AFTER_BOOT 60000 // 1 minute
-
 class System;
 
 class WatchdogThread : public MyThread {
 public:
-    explicit WatchdogThread(System *system, unsigned long interval, const char *name);
+    explicit WatchdogThread(System *system, unsigned long interval, const char *name, bool enabled = true);
+    bool shouldRun(unsigned long time) override;
     virtual bool feed() = 0;
+
+    inline uint64_t timeSinceFed() const {
+        return lastFed > 0 ? millis() - lastFed : 0;
+    }
+
+    inline bool isFed() const {
+        return millis() > TIME_AFTER_BOOT && timeSinceFed() < interval;
+    }
+protected:
+    uint64_t lastFed = 0;
+    bool hasFed;
 };
 
 

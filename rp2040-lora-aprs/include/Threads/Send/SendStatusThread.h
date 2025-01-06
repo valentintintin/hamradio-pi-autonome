@@ -9,7 +9,7 @@ class SendStatusThread : public SendThread {
 public:
     explicit SendStatusThread(System *system);
 protected:
-    bool send() override;
+    bool runOnce() override;
 };
 
 

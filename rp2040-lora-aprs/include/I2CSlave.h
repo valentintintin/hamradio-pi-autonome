@@ -27,6 +27,7 @@ class System;
 class I2CSlave {
 public:
     static void begin(System *system);
+    static void end();
 private:
     static System *system;
 

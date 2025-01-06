@@ -1,47 +1,46 @@
-#include "Threads/Watchdog/WatchdogSlaveMpptChg.h"
+#include "Threads/Watchdog/WatchdogSlaveMpptChgThread.h"
 
 #include "ArduinoLog.h"
 #include "System.h"
-#include "utils.h"
-#include "variant.h"
 
-WatchdogSlaveMpptChg::WatchdogSlaveMpptChg(System *system) :
-WatchdogThread(system, WATCHDOG_MPPTCHG_INTERVAL_FEED_DOG, PSTR("WATCHDOG_MPPTCHG")) {
-#ifdef USE_MPPTCHG_WATCHDOG
+WatchdogSlaveMpptChgThread::WatchdogSlaveMpptChgThread(System *system) :
+WatchdogThread(system, system->settings.mpptWatchdog.intervalFeed, PSTR("WATCHDOG_MPPTCHG")) {
     charger = &system->mpptChgCharger;
-#else
-    assert(charger != nullptr);
-#endif
+    enabled = system->settings.mpptWatchdog.enabled;
 }
 
-bool WatchdogSlaveMpptChg::init() {
+bool WatchdogSlaveMpptChgThread::init() {
     if (charger->begin()
-    && charger->setWatchdogPoweroff(WATCHDOG_MPPTCHG_TIME_POWER_OFF)
-    && charger->setWatchdogTimeout(WATCHDOG_MPPTCHG_TIMEOUT)
-    && charger->setWatchdogEnable(true)) {
-        Log.noticeln(F("[WATCHDOG_MPPTCHG] Initiated with power off %d and timeout %d"), WATCHDOG_MPPTCHG_TIME_POWER_OFF, WATCHDOG_MPPTCHG_TIMEOUT);
+        && charger->setWatchdogPoweroff(system->settings.mpptWatchdog.timeOff)
+        && charger->setWatchdogTimeout(system->settings.mpptWatchdog.timeout)
+        && charger->setWatchdogEnable(true)) {
+        Log.infoln(F("[WATCHDOG_MPPTCHG] Initiated with power off %d and timeout %d"), system->settings.mpptWatchdog.timeOff, system->settings.mpptWatchdog.timeout);
         return true;
     }
 
     return false;
 }
 
-bool WatchdogSlaveMpptChg::runOnce() {
+bool WatchdogSlaveMpptChgThread::runOnce() {
+    hasFed = false;
     return managedByUser || feed();
 }
 
-bool WatchdogSlaveMpptChg::feed() {
-    if (!charger->setWatchdogTimeout(WATCHDOG_MPPTCHG_TIMEOUT)) {
+bool WatchdogSlaveMpptChgThread::feed() {
+    if (!charger->setWatchdogTimeout(system->settings.mpptWatchdog.timeout)) {
         Log.errorln(F("[WATCHDOG_MPPTCHG] Fail to feed dog"));
         return false;
     }
 
     Log.infoln(F("[WATCHDOG_MPPTCHG] Dog fed"));
 
+    hasFed = true;
+    lastFed = millis();
+
     return true;
 }
 
-bool WatchdogSlaveMpptChg::setManagedByUser(unsigned long millis) {
+bool WatchdogSlaveMpptChgThread::setManagedByUser(uint64_t millis) {
     if (millis == 0) {
         managedByUser = true;
         return charger->setWatchdogEnable(false);

@@ -1,9 +1,9 @@
 #include "ArduinoLog.h"
 #include "System.h"
 #include "Threads/EnergyThread.h"
-#include "utils.h"
 
-EnergyThread::EnergyThread(System *system, const char *name) : MyThread(system, INTERVAL_ENERGY, name) {
+EnergyThread::EnergyThread(System *system, const char *name) : MyThread(system, system->settings.energy.intervalCheck, name) {
+    force = true;
 }
 
 bool EnergyThread::runOnce() {

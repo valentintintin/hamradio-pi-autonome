@@ -12,14 +12,24 @@
 #define LORA_DIO1 16          // GPIO16
 #define LORA_DIO4 17          // GPIO17
 
-#define RF_FREQUENCY 433.775
-#define LORA_BANDWIDTH 125
-#define LORA_SPREADING_FACTOR 12 // [SF7..SF12]
-#define LORA_CODINGRATE 5 // [4/5, 4/6, 4/7, 4/8]
-#define TX_OUTPUT_POWER 22
+#define LORA_PREAMBLE_LENGTH 8
 #define TRX_BUFFER 253 // 256 - 3 because 3 bytes for LoRa APRS
 
+#define SLOW_CLOCK_PIN 22
 #define MAX_GPIO_USED 10
+
+#define TIME_SET_MPPT_WATCHDOG_DFU 120000 // 2 minutes
+#define INTERVAL_BLINKER 1000
+#define INTERVAL_PRINT_JSON_USB 30000
+#define TIME_AFTER_BOOT 90000 // 1 minute 30
+#define TIME_WAIT_TOGGLE_WATCHDOG_MASTER 2000 // 2 seconds
+#define TIME_BEFORE_REBOOT 10000 // 10 seconds
+
+#define ENERGY_ADC_BATTERY_SENSE_SAMPLES 15
+//  ratio of voltage divider = 3.0 (R17=200k, R18=100k)
+#define ENERGY_ADC_BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
+#define ENERGY_ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
+#define AREF_VOLTAGE 3.3
 
 extern char bufferText[BUFFER_LENGTH];
 

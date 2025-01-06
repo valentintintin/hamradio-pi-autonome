@@ -1,11 +1,11 @@
-#ifndef RP2040_LORA_APRS_ENERGYDUMMY_H
-#define RP2040_LORA_APRS_ENERGYDUMMY_H
+#ifndef RP2040_LORA_APRS_ENERGYDUMMYTHREAD_H
+#define RP2040_LORA_APRS_ENERGYDUMMYTHREAD_H
 
 #include "Threads/EnergyThread.h"
 
-class EnergyDummy : public EnergyThread {
+class EnergyDummyThread : public EnergyThread {
 public:
-    explicit EnergyDummy(System* system);
+    explicit EnergyDummyThread(System* system);
 protected:
     bool init() override;
     bool fetchVoltageBattery() override;
@@ -15,4 +15,4 @@ protected:
 };
 
 
-#endif //RP2040_LORA_APRS_ENERGYDUMMY_H
+#endif //RP2040_LORA_APRS_ENERGYDUMMYTHREAD_H
