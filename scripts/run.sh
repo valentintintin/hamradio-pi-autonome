@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS meshtastic (
     lastHeard INTEGER,
     createdAt TEXT
 );
+
+CREATE TABLE IF NOT EXISTS aprs (
+    callsign TEXT,
+    content TEXT,
+    snr REAL,
+    rssi REAL,
+    lastHeard INTEGER,
+    createdAt TEXT
+);
 EOF
 }
 
@@ -71,7 +80,7 @@ read_json_from_serial() {
     if [ -n "$JSON_RESPONSE" ] && echo "$JSON_RESPONSE" | jq . > /dev/null 2>&1; then
         echo "JSON reçu: $JSON_RESPONSE"
 
-        echo "$JSON_RESPONSE" > "$DATA_OUTPUT_DIR/mcu.json"
+        echo $"$JSON_RESPONSE" > "$DATA_OUTPUT_DIR/mcu.json"
         return 0
     else
         echo "Erreur : Réponse non valide"
@@ -88,12 +97,14 @@ set_system_time() {
     date
 }
 
-save_telemtry_to_database() {
-    VALUES=$(echo "$JSON_RESPONSE" | jq -r '[.uptime, .energy.voltageBattery, .energy.currentBattery, .energy.voltageSolar, .energy.currentSolar, .box.temperatureRtc, .box.temperatureBattery, .weather.temperature, .weather.humidity, .weather.pressure] | @csv')
+save_telemetries_and_aprs_to_database() {
+    VALUES=$(echo "$JSON_RESPONSE" | jq -r '[.uptime, .energy.voltageBattery, .energy.currentBattery, .energy.voltageSolar, .energy.currentSolar, .box.temperatureRtc, .box.temperatureBattery, .weather.temperature, .weather.humidity, .weather.pressure, (now | todateiso8601)] | @csv')
 
-    sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
-INSERT INTO telemetry VALUES ($VALUES, '$TIMESTAMP');
-EOF
+    save_to_database telemetry
+
+    VALUES=$(echo "$JSON_RESPONSE" | jq -r '.aprsReceived[] | [.callsign, .packet, .snr, .rssi, .time, (now | todateiso8601)] | @csv')
+
+    save_to_database aprs
 }
 
 capture_photos() {
@@ -185,25 +196,32 @@ save_system_info() {
 
     json="{ \"cpu\": $cpu_percentage, \"ram\": $ram_percentage, \"disk\": $disk_percentage, \"sdcard\": $sdcard_percentage, \"uptime\": $uptime_seconds }"
 
-    echo "$json" > "$DATA_OUTPUT_DIR/system.json"
+    echo $"$json" > "$DATA_OUTPUT_DIR/system.json"
     
-    VALUES=$(echo "$json" | jq -r '[.cpu, .ram, .disk, .sdcard, .uptime] | @csv')
+    VALUES=$(echo "$json" | jq -r '[.cpu, .ram, .disk, .sdcard, .uptime, (now | todateiso8601)] | @csv')
 
-    sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
-INSERT INTO system VALUES ($VALUES, '$TIMESTAMP');
-EOF
+    save_to_database system
 }
 
 save_meshtastic_nodes() {
-    json=$(meshtastic --port $MESHTASTIC_SERIAL_PORT --info | sed -n '/Nodes in mesh:/,/Preferences:/p' | head -n -2 | sed '1s/.*/{/' | jq 'to_entries[] | {id: .value.user.id, longName: .value.user.longName, shortName: .value.user.shortName, snr: .value.snr, lastHeard: .value.lastHeard, hopsAway: .value.hopsAway''}')
+    json=$(meshtastic --port $MESHTASTIC_SERIAL_PORT --info | sed -n '/Nodes in mesh:/,/Preferences:/p' | head -n -2 | sed '1s/.*/{/' | jq 'to_entries[] | {id: .value.user.id, longName: .value.user.longName, shortName: .value.user.shortName, snr: .value.snr, lastHeard: .value.lastHeard, hopsAway: .value.hopsAway''}' | jq -r -s '.')
     
-    echo "$json" > "$DATA_OUTPUT_DIR/meshtastic.json"
+    echo $"$json" > "$DATA_OUTPUT_DIR/meshtastic.json"
      
-    VALUES=$(echo "$json" | jq -r '[.id, .longName, .shortName, .snr, .lastHeard] | @csv')
+    VALUES=$(echo "$json" | jq -r '[.id, .longName, .shortName, .snr, .lastHeard, (now | todateiso8601)] | @csv')
+
+    save_to_database meshtastic
+}
+
+save_to_database() {
+    echo $"$VALUES" > /tmp/data.csv
 
     sqlite3 "$DATA_OUTPUT_DIR/data.db" <<EOF
-INSERT INTO meshtastic VALUES ($VALUES, '$TIMESTAMP');
+.mode csv
+.import /tmp/data.csv $1
 EOF
+
+    rm /tmp/data.csv
 }
 
 startup
