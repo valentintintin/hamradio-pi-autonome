@@ -36,7 +36,7 @@ private:
     static void doSetTime(MyCommandParser::Argument *args, char *response);
     static void doMeshtasticAprs(MyCommandParser::Argument *args, char *response);
     static void doLinuxAprs(MyCommandParser::Argument *args, char *response);
-    static void doGetLdrAdc(MyCommandParser::Argument *args, char *response);
+    static void doGetBoxInfo(MyCommandParser::Argument *args, char *response);
 };
 
 #endif //CUBECELL_MONITORING_COMMAND_H

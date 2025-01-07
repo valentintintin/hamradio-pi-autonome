@@ -15,7 +15,12 @@ bool LdrBoxOpenedThread::runOnce() {
 
     if (_isBoxOpened) {
         Log.warningln(F("[LDR_BOX_OPENED] LDR box opened !"));
-        return system->communication.sendMessage(PSTR("F4HVV-7"), PSTR("Box opened !"));
+
+        if (system->isInDebugMode()) {
+            return true;
+        }
+
+        return system->communication.sendMessage(PSTR("F4HVV-7"), PSTR("Boîte ouverte !"));
     }
 
     Log.traceln(F("[LDR_BOX_OPENED] Box closed"));

@@ -459,7 +459,7 @@ void System::printJson(bool onUsb) {
     int16_t temperatureBattery = 0;
 
     if (settings.energy.type == mpptchg && !mpptChgCharger.getIndexedValue(VAL_INT_TEMP, &temperatureBattery)) {
-        Log.warningln(F("[COMMAND] Impossible to get MPPT Temperature"));
+        Log.warningln(F("[SYSTEM] Impossible to get MPPT Temperature"));
     }
 
     JsonWriter *jsonWriter = onUsb ? (isSlowClock ? &serialLowPowerJsonWriter : &serialJsonWriter) : &serialLinuxJsonWriter;

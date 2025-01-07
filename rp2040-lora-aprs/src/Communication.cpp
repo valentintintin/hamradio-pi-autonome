@@ -200,11 +200,9 @@ bool Communication::sendTelemetry() {
 
     i = 0;
 
-    aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->watchdogMeshtastic->isGpioOn();
-    aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->watchdogLinux->isGpioOn();
-    aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->energyThread->hasError();
-    aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->weatherThread->hasError();
     aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->ldrBoxOpenedThread->isBoxOpened();
+    aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->watchdogMeshtastic->isGpioOn();
+    // aprsPacketTx.telemetries.telemetriesBoolean[i++].value = system->watchdogLinux->isGpioOn();
 
     aprsPacketTx.type = Telemetry;
     result |= send();
@@ -244,10 +242,8 @@ bool Communication::sendTelemetryParams() {
     i = 0;
 
     strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[i++].name, PSTR("Msh"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[i++].name, PSTR("Lnx"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[i++].name, PSTR("Err"));
-    strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[i++].name, PSTR("Wrr"));
     strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[i++].name, PSTR("Box"));
+    // strcpy_P(aprsPacketTx.telemetries.telemetriesBoolean[i++].name, PSTR("Lnx"));
 
     aprsPacketTx.type = TelemetryLabel;
     bool result = send();

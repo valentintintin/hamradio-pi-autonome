@@ -13,10 +13,6 @@ public:
     inline bool isBoxOpened() const {
         return _isBoxOpened;
     }
-
-    inline uint16_t getRawValue() const {
-        return ldr->getValue();
-    }
 protected:
     bool runOnce() override;
 private:

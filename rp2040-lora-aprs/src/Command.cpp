@@ -31,7 +31,7 @@ Command::Command(System *system) {
     parser.registerCommand(PSTR("time"), PSTR("u"), doSetTime);
     parser.registerCommand(PSTR("objMsh"), PSTR(""), doMeshtasticAprs);
     parser.registerCommand(PSTR("objLinux"), PSTR(""), doLinuxAprs);
-    parser.registerCommand(PSTR("ldr"), PSTR(""), doGetLdrAdc);
+    parser.registerCommand(PSTR("box"), PSTR(""), doGetBoxInfo);
 }
 
 bool Command::processCommand(Stream* stream, const char *command) {
@@ -586,6 +586,15 @@ void Command::doLinuxAprs(MyCommandParser::Argument *args, char *response) {
     strcpy_P(response, PSTR("OK"));
 }
 
-void Command::doGetLdrAdc(MyCommandParser::Argument *args, char *response) {
-    sprintf_P(response, PSTR("%d OK"), system->ldrBoxOpenedThread->getRawValue());
+void Command::doGetBoxInfo(MyCommandParser::Argument *args, char *response) {
+    int16_t rawTemperatureBattery = 0;
+
+    if (system->settings.energy.type == mpptchg && !system->mpptChgCharger.getIndexedValue(VAL_INT_TEMP, &rawTemperatureBattery)) {
+        Log.warningln(F("[COMMAND] Impossible to get MPPT Temperature"));
+    }
+
+    auto temperatureBattery = system->settings.energy.type == mpptchg && !system->energyThread->hasError() ? rawTemperatureBattery / 10.0 : 0;
+    auto temperatureRtc = system->settings.rtc.enabled ? system->rtc.getTemperature() : 0;
+
+    sprintf_P(response, PSTR("RTC:%f°C | Bat:%f°C | Ouverte:%d"), temperatureRtc, temperatureBattery, system->ldrBoxOpenedThread->isBoxOpened());
 }

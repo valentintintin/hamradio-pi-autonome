@@ -48,6 +48,10 @@ public:
         return communication.hasError() || weatherThread->hasError() || energyThread->hasError();
     }
 
+    inline bool isInDebugMode() const {
+        return isSlowClock;
+    }
+
     Settings settings{};
 
     LdrBoxOpenedThread *ldrBoxOpenedThread{};
