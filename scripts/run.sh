@@ -75,9 +75,9 @@ EOF
 read_json_from_serial() {
     echo "Envoi de la commande sur le port série..."
     echo -e "json" > "$SERIAL_PORT"
-    JSON_RESPONSE=$(timeout 2s cat "$SERIAL_PORT")
+    JSON_RESPONSE=$(timeout 5s cat "$SERIAL_PORT")
 
-    if [ -n "$JSON_RESPONSE" ] && echo "$JSON_RESPONSE" | jq . > /dev/null 2>&1; then
+    if [ -n "$JSON_RESPONSE" ] && echo "$JSON_RESPONSE" | jq -r '.' > /dev/null 2>&1; then
         echo "JSON reçu: $JSON_RESPONSE"
 
         echo $"$JSON_RESPONSE" > "$DATA_OUTPUT_DIR/mcu.json"
@@ -208,7 +208,7 @@ save_meshtastic_nodes() {
     
     echo $"$json" > "$DATA_OUTPUT_DIR/meshtastic.json"
      
-    VALUES=$(echo "$json" | jq -r '[.id, .longName, .shortName, .snr, .lastHeard, (now | todateiso8601)] | @csv')
+    VALUES=$(echo "$json" | jq -r '.[] | [.id, .longName, .shortName, .snr, .lastHeard, (now | todateiso8601)] | @csv')
 
     save_to_database meshtastic
 }
@@ -230,19 +230,21 @@ while true; do
     TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
     date
 
-    if read_json_from_serial; then    
-        set_system_time
-        generate_telemetry_image
-    fi
+#    if read_json_from_serial; then    
+#        set_system_time
+#        save_telemetries_and_aprs_to_database
+        #generate_telemetry_image
+#    fi
     
-    capture_photos
-    save_system_info
+#    capture_photos
+#    save_system_info
     save_meshtastic_nodes
+    exit 1
 
     if check_ethernet_connection; then
         if check_link_connection; then
             echo "Liaison OK. On synchronise les fichiers"
-            sync_photos
+ #           sync_photos
         fi
         date
         sleep $SLEEP_DURATION
