@@ -1,9 +1,9 @@
 #include "Threads/WatchdogThread.h"
 
-WatchdogThread::WatchdogThread(System *system, unsigned long interval, const char *name, bool enabled) : MyThread(system, interval, name, false, enabled) {
+WatchdogThread::WatchdogThread(System *system, const unsigned long interval, const char *name, const bool enabled) : MyThread(system, interval, name, false, enabled) {
     force = true;
 }
 
-bool WatchdogThread::shouldRun(unsigned long time) {
+bool WatchdogThread::shouldRun(const unsigned long time) {
     return MyThread::shouldRun(time) && millis() > TIME_AFTER_BOOT;
 }

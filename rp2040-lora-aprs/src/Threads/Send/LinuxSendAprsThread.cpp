@@ -11,6 +11,6 @@ bool LinuxSendAprsThread::runOnce() {
                                           system->watchdogLinux->isFed() || force);
 }
 
-bool LinuxSendAprsThread::shouldRun(unsigned long time) {
+bool LinuxSendAprsThread::shouldRun(const unsigned long time) {
     return SendThread::shouldRun(time) && system->watchdogLinux->enabled;
 }

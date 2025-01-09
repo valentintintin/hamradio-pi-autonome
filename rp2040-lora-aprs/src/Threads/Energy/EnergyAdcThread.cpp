@@ -9,7 +9,7 @@ bool EnergyAdcThread::fetchVoltageBattery() {
     uint32_t raw = 0;
 
     for (uint32_t i = 0; i < ENERGY_ADC_BATTERY_SENSE_SAMPLES; i++) {
-        uint16_t value = adc->getValue();
+        const uint16_t value = adc->getValue();
         Log.verboseln(F("[ENERGY_ADC] Sample %d : %d"), i, value);
         raw += value;
     }

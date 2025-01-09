@@ -8,7 +8,7 @@ public:
     explicit EnergyMpptChgThread(System *system);
     void run() override;
 
-    bool setPowerOnOff(uint16_t powerOnVoltage, uint16_t powerOffVoltage);
+    bool setPowerOnOff(uint16_t powerOnVoltage, uint16_t powerOffVoltage) const;
 
     inline bool isNight() const override {
         return _isNight;

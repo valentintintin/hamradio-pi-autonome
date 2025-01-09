@@ -1,13 +1,13 @@
 #include "MyThread.h"
 #include "ArduinoLog.h"
 
-MyThread::MyThread(System *system, unsigned long interval, const char *name, bool noLog, bool enabled) : system(system), noLog(noLog) {
+MyThread::MyThread(System *system, const unsigned long interval, const char *name, const bool noLog, const bool enabled) : system(system), noLog(noLog) {
     this->enabled = enabled;
-    setInterval(interval);
+    Thread::setInterval(interval);
     ThreadName = name;
 }
 
-bool MyThread::shouldRun(unsigned long time) {
+bool MyThread::shouldRun(const unsigned long time) {
     return Thread::shouldRun(time) || force;
 }
 

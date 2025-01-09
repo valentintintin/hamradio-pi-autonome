@@ -6,7 +6,7 @@
 char bufferText[BUFFER_LENGTH]{};
 
 System systemControl;
-GpioPin gpioSlowClock = GpioPin(SLOW_CLOCK_PIN, INPUT);
+auto gpioSlowClock = GpioPin(SLOW_CLOCK_PIN, INPUT);
 
 void setSlowClock();
 
@@ -34,9 +34,9 @@ void loop() {
 }
 
 
-void delayWdt(uint32_t milliseconds) {
+void delayWdt(const uint32_t milliseconds) {
     if (systemControl.settings.useInternalWatchdog) {
-        uint64_t startTime = millis();
+        const uint64_t startTime = millis();
         uint64_t elapsedTime = 0;
 
         while (elapsedTime < milliseconds) {
@@ -53,7 +53,7 @@ void delayWdt(uint32_t milliseconds) {
     }
 }
 
-void ledBlink(uint8_t howMany, uint16_t milliseconds) {
+void ledBlink(const uint8_t howMany, const uint16_t milliseconds) {
     for (uint8_t i = 0; i < howMany; i++) {
         digitalWrite(PIN_LED, HIGH);
         delayWdt(milliseconds);

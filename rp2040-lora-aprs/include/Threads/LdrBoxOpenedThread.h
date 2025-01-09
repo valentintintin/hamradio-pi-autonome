@@ -11,13 +11,12 @@ public:
     explicit LdrBoxOpenedThread(System *system);
 
     inline bool isBoxOpened() const {
-        return _isBoxOpened;
+        return ldr->getState();
     }
 protected:
     bool runOnce() override;
 private:
     GpioPin *ldr;
-    bool _isBoxOpened;
 };
 
 

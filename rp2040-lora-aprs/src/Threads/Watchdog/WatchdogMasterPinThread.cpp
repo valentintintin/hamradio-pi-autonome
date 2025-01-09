@@ -4,7 +4,7 @@
 #include "System.h"
 #include "utils.h"
 
-WatchdogMasterPinThread::WatchdogMasterPinThread(System *system, GpioPin *gpio, unsigned long intervalCheck, bool enabled):
+WatchdogMasterPinThread::WatchdogMasterPinThread(System *system, GpioPin *gpio, const unsigned long intervalCheck, const bool enabled):
 WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN"), enabled), gpio(gpio) {
 }
 
@@ -49,7 +49,7 @@ bool WatchdogMasterPinThread::feed() {
     return true;
 }
 
-void WatchdogMasterPinThread::sleep(uint64_t millis) {
+void WatchdogMasterPinThread::sleep(const uint64_t millis) {
     Log.infoln(F("[WATCHDOG_PIN_%d] Sleep for %ums at next internal (%u)"), gpio->getPin(), millis, interval);
     timerSleep.setInterval(millis);
     wantToSleep = true;

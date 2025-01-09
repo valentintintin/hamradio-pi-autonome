@@ -37,8 +37,8 @@ private:
     System* system;
 
     uint8_t buffer[TRX_BUFFER]{};
-    AprsPacket aprsPacketTx;
-    AprsPacketLite aprsPacketRx;
+    AprsPacket aprsPacketTx{};
+    AprsPacketLite aprsPacketRx{};
     uint16_t telemetrySequenceNumber = 0;
     SX1262 lora = new Module(LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     bool _hasError = false;

@@ -18,7 +18,7 @@ bool Communication::begin() {
     digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
 
-    SettingsLoRa settings = system->settings.lora;
+    const SettingsLoRa settings = system->settings.lora;
 
     if (lora.begin(settings.frequency, settings.bandwidth, settings.spreadingFactor, settings.codingRate, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, settings.outputPower, LORA_PREAMBLE_LENGTH, 0, false) != RADIOLIB_ERR_NONE) {
         Log.errorln(F("[LORA] Init error"));
@@ -67,14 +67,14 @@ void Communication::setHasInterrupt() {
 void Communication::update() {
     if (hasInterrupt) {
         hasInterrupt = false;
-        uint16_t irqFlags = lora.getIrqFlags();
+        const uint16_t irqFlags = lora.getIrqFlags();
 
         Log.traceln(F("[LORA] Interrupt with flags : %d"), irqFlags);
 
         if (irqFlags & RADIOLIB_SX126X_IRQ_RX_DONE) {
             memset(buffer, '\0', sizeof(buffer));
-            size_t size = lora.getPacketLength();
-            int state = lora.readData(buffer, size);
+            const size_t size = lora.getPacketLength();
+            const int state = lora.readData(buffer, size);
             if (state == RADIOLIB_ERR_NONE && size >= 15) {
                 received(buffer, size, lora.getRSSI(), lora.getSNR());
             }
@@ -87,60 +87,59 @@ void Communication::update() {
 bool Communication::send() {
     system->gpioLed.setState(HIGH);
 
-    uint8_t size = Aprs::encode(&aprsPacketTx, bufferText);
+    const uint8_t size = Aprs::encode(&aprsPacketTx, bufferText);
 
     if (!size) {
         Log.errorln(F("[APRS] Error during string encode"));
         return false;
-    } else {
-        buffer[0] = '<';
-        buffer[1]= 0xFF;
-        buffer[2] = 0x01;
+    }
+    buffer[0] = '<';
+    buffer[1]= 0xFF;
+    buffer[2] = 0x01;
 
-        for (uint8_t i = 0; i < size; i++) {
-            buffer[i + 3] = bufferText[i];
-            Log.verboseln(F("[LORA_TX] Payload[%d]=%X %c"), i + 3, buffer[i + 3], buffer[i + 3]);
-        }
+    for (uint8_t i = 0; i < size; i++) {
+        buffer[i + 3] = bufferText[i];
+        Log.verboseln(F("[LORA_TX] Payload[%d]=%X %c"), i + 3, buffer[i + 3], buffer[i + 3]);
+    }
 
-        Log.infoln(F("[LORA_TX] Start send %d chars : %s"), size, bufferText);
+    Log.infoln(F("[LORA_TX] Start send %d chars : %s"), size, bufferText);
 
-        uint8_t i = 0;
-        while (i++ < 3 && isChannelActive()) {
-            startReceive();
-            delayWdt(1000);
-        }
-        if (i == 3) {
-            Log.errorln(F("[LORA_TX] Can't send because too much signal on channel"));
+    uint8_t i = 0;
+    while (i++ < 3 && isChannelActive()) {
+        startReceive();
+        delayWdt(1000);
+    }
+    if (i == 3) {
+        Log.errorln(F("[LORA_TX] Can't send because too much signal on channel"));
+        return false;
+    }
+
+    if (system->settings.lora.txEnabled) {
+        const int currentState = lora.transmit(buffer, size + 3);
+
+        if (currentState == RADIOLIB_ERR_NONE) {
+            sent();
+        } else if (currentState == RADIOLIB_ERR_PACKET_TOO_LONG) {
+            Log.errorln(F("[LORA] TX Error too long"));
+            _hasError = true;
+            return false;
+        } else if (currentState == RADIOLIB_ERR_TX_TIMEOUT) {
+            Log.errorln(F("[LORA] TX Error timeout"));
+            _hasError = true;
+            return false;
+        } else {
+            sprintf_P(bufferText, PSTR("[LORA] TX Error : %d"), currentState);
+            _hasError = true;
+            Log.errorln(bufferText);
             return false;
         }
-
-        if (system->settings.lora.txEnabled) {
-            int currentState = lora.transmit(buffer, size + 3);
-
-            if (currentState == RADIOLIB_ERR_NONE) {
-                sent();
-            } else if (currentState == RADIOLIB_ERR_PACKET_TOO_LONG) {
-                Log.errorln(F("[LORA] TX Error too long"));
-                _hasError = true;
-                return false;
-            } else if (currentState == RADIOLIB_ERR_TX_TIMEOUT) {
-                Log.errorln(F("[LORA] TX Error timeout"));
-                _hasError = true;
-                return false;
-            } else {
-                sprintf_P(bufferText, PSTR("[LORA] TX Error : %d"), currentState);
-                _hasError = true;
-                Log.errorln(bufferText);
-                return false;
-            }
-        }
-        else {
-            delayWdt(1000);
-            sent();
-        }
-
-        return true;
     }
+    else {
+        delayWdt(1000);
+        sent();
+    }
+
+    return true;
 }
 
 bool Communication::sendRaw(const char *raw) {
@@ -155,7 +154,7 @@ bool Communication::sendRaw(const char *raw) {
 bool Communication::sendMessage(const char* destination, const char* message, const char* ackToConfirm) {
     Aprs::reset(&aprsPacketTx);
 
-    SettingsAprs settings = system->settings.aprs;
+    const SettingsAprs settings = system->settings.aprs;
 
     strcpy(aprsPacketTx.path, settings.path);
     strcpy(aprsPacketTx.source, settings.call);
@@ -183,7 +182,7 @@ bool Communication::sendTelemetry() {
         shouldSendTelemetryParams = !result;
     }
 
-    SettingsAprs settings = system->settings.aprs;
+    const SettingsAprs settings = system->settings.aprs;
 
     strcpy(aprsPacketTx.path, settings.path);
     strcpy(aprsPacketTx.source, settings.call);
@@ -213,7 +212,7 @@ bool Communication::sendTelemetry() {
 bool Communication::sendTelemetryParams() {
     Aprs::reset(&aprsPacketTx);
 
-    SettingsAprs settings = system->settings.aprs;
+    const SettingsAprs settings = system->settings.aprs;
 
     strcpy(aprsPacketTx.path, settings.path);
     strcpy(aprsPacketTx.source, settings.call);
@@ -260,7 +259,7 @@ bool Communication::sendTelemetryParams() {
 bool Communication::sendPosition(const char* comment) {
     Aprs::reset(&aprsPacketTx);
 
-    SettingsAprs settings = system->settings.aprs;
+    const SettingsAprs settings = system->settings.aprs;
 
     strcpy(aprsPacketTx.path, settings.path);
     strcpy(aprsPacketTx.source, settings.call);
@@ -281,9 +280,9 @@ bool Communication::sendPosition(const char* comment) {
                         aprsPacketTx.weather.useTemperature =
                                 aprsPacketTx.weather.usePressure = true;
 
-        aprsPacketTx.weather.temperatureFahrenheit = (int16_t) (system->weatherThread->getTemperature() * 9.0 / 5.0 + 32);
-        aprsPacketTx.weather.humidity = (int16_t) system->weatherThread->getHumidity();
-        aprsPacketTx.weather.pressure = (int16_t) system->weatherThread->getPressure();
+        aprsPacketTx.weather.temperatureFahrenheit = static_cast<int16_t>(system->weatherThread->getTemperature() * 9.0 / 5.0 + 32);
+        aprsPacketTx.weather.humidity = static_cast<int16_t>(system->weatherThread->getHumidity());
+        aprsPacketTx.weather.pressure = static_cast<int16_t>(system->weatherThread->getPressure());
     }
 
     if (settings.telemetryInPosition && !system->energyThread->hasError()) {
@@ -308,7 +307,7 @@ bool Communication::sendPosition(const char* comment) {
 bool Communication::sendStatus(const char* comment) {
     Aprs::reset(&aprsPacketTx);
 
-    SettingsAprs settings = system->settings.aprs;
+    const SettingsAprs settings = system->settings.aprs;
 
     strcpy(aprsPacketTx.path, settings.path);
     strcpy(aprsPacketTx.source, settings.call);
@@ -321,10 +320,10 @@ bool Communication::sendStatus(const char* comment) {
     return send();
 }
 
-bool Communication::sendItem(const char *name, const char symbol, const char symbolTable, const char* comment, bool alive) {
+bool Communication::sendItem(const char *name, const char symbol, const char symbolTable, const char* comment, const bool alive) {
     Aprs::reset(&aprsPacketTx);
 
-    SettingsAprs settings = system->settings.aprs;
+    const SettingsAprs settings = system->settings.aprs;
 
     strcpy(aprsPacketTx.path, settings.path);
     strcpy(aprsPacketTx.source, settings.call);
@@ -358,7 +357,7 @@ void Communication::sent() {
     startReceive();
 }
 
-void Communication::received(uint8_t * payload, uint16_t size, float rssi, float snr) {
+void Communication::received(uint8_t * payload, const uint16_t size, const float rssi, const float snr) {
     Log.traceln(F("[LORA_RX] Payload of size %d, RSSI : %F and SNR : %F"), size, rssi, snr);
     Log.infoln(F("[LORA_RX] %s"), payload);
 
@@ -377,7 +376,7 @@ void Communication::received(uint8_t * payload, uint16_t size, float rssi, float
 
         system->addAprsFrameReceivedToHistory(&aprsPacketRx, snr, rssi);
 
-        SettingsAprs settings = system->settings.aprs;
+        const SettingsAprs settings = system->settings.aprs;
 
         if (strstr(aprsPacketRx.message.destination, settings.call) != nullptr) {
             Log.traceln(F("[APRS] Message for me : %s"), aprsPacketRx.message.message);
@@ -387,7 +386,7 @@ void Communication::received(uint8_t * payload, uint16_t size, float rssi, float
                     shouldTx = sendMessage(aprsPacketRx.source, PSTR(""), aprsPacketRx.message.ackToConfirm);
                 }
 
-                bool processCommandResult = system->command.processCommand(nullptr, aprsPacketRx.message.message);
+                const bool processCommandResult = system->command.processCommand(nullptr, aprsPacketRx.message.message);
 
                 sprintf_P(bufferText, PSTR("%s: %s"), processCommandResult ? PSTR("OK") : PSTR("KO"), system->command.response);
 
@@ -420,7 +419,7 @@ bool Communication::isChannelActive() {
 
     lora.standby();
 
-    auto result = lora.scanChannel();
+    const auto result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED) {
         Log.warningln(F("[LORA] Channel is already active"));
         return true;

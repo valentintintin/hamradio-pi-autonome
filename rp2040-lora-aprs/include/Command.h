@@ -22,6 +22,7 @@ private:
     static void doPosition(MyCommandParser::Argument *args, char *response);
     static void doTelemetry(MyCommandParser::Argument *args, char *response);
     static void doTelemetryParams(MyCommandParser::Argument *args, char *response);
+    static void doStatus(MyCommandParser::Argument *args, char *response);
     static void doLora(MyCommandParser::Argument *args, char *response);
     static void doReboot(MyCommandParser::Argument *args, char *response);
     static void doReset(MyCommandParser::Argument *args, char *response);
@@ -37,6 +38,12 @@ private:
     static void doMeshtasticAprs(MyCommandParser::Argument *args, char *response);
     static void doLinuxAprs(MyCommandParser::Argument *args, char *response);
     static void doGetBoxInfo(MyCommandParser::Argument *args, char *response);
+
+    static void doAprsQueryHelp(MyCommandParser::Argument *args, char *response);
+    static void doAprsHeard(MyCommandParser::Argument *args, char *response);
+    static void doAprsHeardSomeone(MyCommandParser::Argument *args, char *response);
+    static void doAbout(MyCommandParser::Argument *args, char *response);
+    static void doAprsPing(MyCommandParser::Argument *args, char *response);
 };
 
 #endif //CUBECELL_MONITORING_COMMAND_H

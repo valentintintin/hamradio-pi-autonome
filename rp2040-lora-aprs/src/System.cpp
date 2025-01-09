@@ -16,9 +16,9 @@
 #include "utils.h"
 #include "PicoSleep.h"
 
-System::System() : command(this), communication(this) {
+System::System() : communication(this), command(this) {
     timerReboot.pause();
-    timerDfu.pause();;
+    timerDfu.pause();
 }
 
 bool System::begin() {
@@ -54,8 +54,8 @@ bool System::begin() {
 
     if (settings.rtc.enabled) {
         gpiosPin[gpioI++] = new GpioPin(settings.rtc.wakeUpPin, INPUT);
-        auto now = RTClib::now();
-        if (now.year() >= 2024) {
+        const auto now = RTClib::now();
+        if (now.year() >= 2025) {
             setTimeToInternalRtc(now.unixtime());
         } else {
             Log.warningln(F("[RTC] Wrong rtc time !"));
@@ -91,23 +91,25 @@ bool System::begin() {
     }
 
     watchdogSlaveMpptChgThread = new WatchdogSlaveMpptChgThread(this);
-    threadController.add(watchdogSlaveMpptChgThread);
+    if (settings.energy.type == mpptchg) {
+        threadController.add(watchdogSlaveMpptChgThread);
+    }
 
     watchdogSlaveLoraTxThread = new WatchdogSlaveLoraTxThread(this);
     threadController.add(watchdogSlaveLoraTxThread);
 
-    auto *gpioMeshtastic = new GpioPin(settings.meshtastic.pin, OUTPUT, false, false, true);
+    auto *gpioMeshtastic = new GpioPin(settings.meshtastic.pin, OUTPUT_2MA, false, false, true);
     gpiosPin[gpioI++] = gpioMeshtastic;
     watchdogMeshtastic = new WatchdogMasterPinThread(this, gpioMeshtastic, settings.meshtastic.intervalTimeoutWatchdog, settings.meshtastic.watchdogEnabled);
     threadController.add(watchdogMeshtastic);
 
-    auto *gpioLinuxBoard = new GpioPin(settings.linux.pin, OUTPUT, false, false, true);
+    auto *gpioLinuxBoard = new GpioPin(settings.linux.pin, OUTPUT_2MA, false, false, true);
     gpiosPin[gpioI++] = gpioLinuxBoard;
     watchdogLinux = new WatchdogMasterPinThread(this, gpioLinuxBoard, settings.linux.intervalTimeoutWatchdog, settings.linux.watchdogEnabled);
     threadController.add(watchdogLinux);
 
-    gpiosPin[gpioI++] = new GpioPin(settings.linux.nprPin, OUTPUT, false, true);
-    gpiosPin[gpioI++] = new GpioPin(settings.linux.wifiPin, OUTPUT, false, true);
+    gpiosPin[gpioI++] = new GpioPin(settings.linux.nprPin, OUTPUT_12MA, false, true);
+    gpiosPin[gpioI++] = new GpioPin(settings.linux.wifiPin, OUTPUT_12MA, false, true);
 
     sendPositionThread = new SendPositionThread(this);
     threadController.add(sendPositionThread);
@@ -118,15 +120,18 @@ bool System::begin() {
     sendTelemetriesThread = new SendTelemetriesThread(this);
     threadController.add(sendTelemetriesThread);
 
-    meshtasticSendAprsThread = new MeshtasticSendAprsThread(this);
-    threadController.add(meshtasticSendAprsThread);
+    sendMeshtasticAprsThread = new MeshtasticSendAprsThread(this);
+    threadController.add(sendMeshtasticAprsThread);
 
-    linuxSendAprsThread = new LinuxSendAprsThread(this);
-    threadController.add(linuxSendAprsThread);
+    sendLinuxAprsThread = new LinuxSendAprsThread(this);
+    threadController.add(sendLinuxAprsThread);
 
     for(int i = 0; i < MAX_THREADS ; i++) {
-        auto thread = (MyThread*) threadController.get(i);
-        if (thread != nullptr) {
+        if (const auto thread = static_cast<MyThread *>(threadController.get(i)); thread != nullptr) { // NOLINT(*-pro-type-static-cast-downcast)
+            if (!thread->enabled) {
+                continue;
+            }
+
             if (!thread->begin()) {
                 Log.errorln(F("[SYSTEM] Thread %s init KO"), thread->ThreadName.c_str());
                 continue;
@@ -160,7 +165,7 @@ void System::loop() {
     if (streamReceived != nullptr) {
         gpioLed.setState(true);
 
-        size_t lineLength = streamReceived->readBytesUntil('\n', bufferText, BUFFER_LENGTH - 5);
+        const size_t lineLength = streamReceived->readBytesUntil('\n', bufferText, BUFFER_LENGTH - 5);
         bufferText[lineLength] = '\0';
 
         Log.traceln(F("[SERIAL] Received %s"), bufferText);
@@ -182,8 +187,10 @@ void System::loop() {
     if (timerReboot.hasExpired()) {
         rp2040.reboot();
         return;
-    } else if (timerDfu.hasExpired()) {
-        if (watchdogSlaveMpptChgThread->enabled) {
+    }
+
+    if (timerDfu.hasExpired()) {
+        if (settings.energy.type == mpptchg && watchdogSlaveMpptChgThread->enabled) {
             watchdogSlaveMpptChgThread->setManagedByUser(TIME_SET_MPPT_WATCHDOG_DFU);
         }
 
@@ -196,8 +203,8 @@ void System::loop() {
     rp2040.wdt_reset();
 }
 
-void System::setTimeToInternalRtc(uint32_t unixtime) {
-    auto epoch = unixtime;
+void System::setTimeToInternalRtc(const uint32_t unixtime) {
+    const auto epoch = unixtime;
     datetime_t datetime;
     epoch_to_datetime(epoch, &datetime);
     rtc_set_datetime(&datetime);
@@ -214,7 +221,7 @@ bool System::loadSettings() {
         return saveSettings();
     }
 
-    file.read((uint8_t*)&settings, sizeof(Settings));
+    file.read(reinterpret_cast<uint8_t *>(&settings), sizeof(Settings));
     file.close();
 
     Log.infoln(F("[CONFIG] Read correctly"));
@@ -232,7 +239,7 @@ bool System::saveSettings() {
         return false;
     }
 
-    file.write((uint8_t *) &settings, sizeof(Settings));
+    file.write(reinterpret_cast<uint8_t *>(&settings), sizeof(Settings));
     file.close();
 
     Log.infoln(F("[CONFIG] Save to FS"));
@@ -243,7 +250,7 @@ bool System::saveSettings() {
 void System::addAprsFrameReceivedToHistory(const AprsPacketLite *packet, const float snr, const float rssi) {
     uint8_t frameIndex = 0;
 
-    for (auto oldFrame : settings.aprsCallsignsHeard) {
+    for (const auto oldFrame : settings.aprsCallsignsHeard) {
         if (strcmp(oldFrame.callsign, packet->source) == 0 || strlen(oldFrame.callsign) == 0) {
             break;
         }
@@ -251,13 +258,13 @@ void System::addAprsFrameReceivedToHistory(const AprsPacketLite *packet, const f
         frameIndex++;
     }
 
-    SettingsAprsCallsignHeard *freeFrame = &settings.aprsCallsignsHeard[frameIndex];
+    lastAprsHeard = &settings.aprsCallsignsHeard[frameIndex];
 
-    freeFrame->time = getDateTime().unixtime();
-    freeFrame->snr = snr;
-    freeFrame->rssi = rssi;
-    strcpy(freeFrame->callsign, packet->source);
-    strcpy(freeFrame->content, packet->raw);
+    lastAprsHeard->time = getDateTime().unixtime();
+    lastAprsHeard->snr = snr;
+    lastAprsHeard->rssi = rssi;
+    strcpy(lastAprsHeard->callsign, packet->source);
+    strcpy(lastAprsHeard->content, packet->raw);
 
     saveSettings();
 }
@@ -284,7 +291,7 @@ void System::setDefaultSettings() {
     settings.lora.outputPower = 12;
     settings.lora.txEnabled = true;
     settings.lora.watchdogTxEnabled = true;
-    settings.lora.intervalTimeoutWatchdogTx = 1200000; // 20 minutes
+    settings.lora.intervalTimeoutWatchdogTx = 720000; // 2 hours
 
     strcpy_P(settings.aprs.call, PSTR("F4HVV-15"));
     strcpy_P(settings.aprs.destination, PSTR("APLV1"));
@@ -315,32 +322,32 @@ void System::setDefaultSettings() {
     strcpy_P(settings.meshtastic.itemName, PSTR("MSH"));
     settings.meshtastic.symbol = '#';
     settings.meshtastic.symbolTable = '\\';
-    strcpy_P(settings.meshtastic.itemComment, PSTR("Meshtastic LongModerate 868.4625"));
+    strcpy_P(settings.meshtastic.itemComment, PSTR("Meshtastic LongModerate 869.4625"));
 
     settings.mpptWatchdog.enabled = true;
     settings.mpptWatchdog.timeout = 90; // 1,5 minutes
     settings.mpptWatchdog.timeOff = 10; // 10 seconds
     settings.mpptWatchdog.intervalFeed = 30000; // 30 seconds
 
-    settings.energy.intervalCheck = 30000; // 30 seconds
-    settings.energy.type = mpptchg;
+    settings.energy.intervalCheck = 60000; // 60 seconds
+    settings.energy.type = isInDebugMode() ? dummy : mpptchg;
     settings.energy.mpptPowerOffVoltage = 11000;
     settings.energy.mpptPowerOnVoltage = 11200;
 
     settings.weather.enabled = true;
-    settings.weather.intervalCheck = 30000; // 30 seconds
+    settings.weather.intervalCheck = 60000; // 60 seconds
 
     settings.linux.watchdogEnabled = false;
     settings.linux.intervalTimeoutWatchdog = 300000; // 5 minutes
     settings.linux.pin = 19;
     settings.linux.nprPin = 12;
     settings.linux.wifiPin = 11;
-    settings.linux.aprsSendItemEnabled = true;
+    settings.linux.aprsSendItemEnabled = false;
     settings.linux.intervalSendItem = 3600000; // 1 hour
     strcpy_P(settings.linux.itemName, PSTR("CAMIP"));
     settings.linux.symbol = 'I';
     settings.linux.symbolTable = '/';
-    strcpy_P(settings.linux.itemComment, PSTR("Cameras IP f4hvv.pixel-server.ovh"));
+    strcpy_P(settings.linux.itemComment, PSTR("f4hvv.valentin-saugnier.fr/f4hvv-15"));
 
     settings.rtc.enabled = true;
     settings.rtc.wakeUpPin = 6;
@@ -438,9 +445,9 @@ void System::printSettings() {
     Log.traceln(F("[CONFIG] useInternalWatchdog = %T"), settings.useInternalWatchdog);
 
     uint8_t frameIndex = 0;
-    for (auto frame : settings.aprsCallsignsHeard) {
-        if (strlen(frame.callsign) > 0) {
-            Log.traceln(F("[CONFIG] APRS Frame received #%d at %u from %s with SNR %F and RSSI %F, content: %s"), frameIndex++, frame.time, frame.callsign, frame.snr, frame.rssi, frame.content);
+    for (auto [callsign, time, rssi, snr, content] : settings.aprsCallsignsHeard) {
+        if (strlen(callsign) > 0) {
+            Log.traceln(F("[CONFIG] APRS Frame received #%d at %u from %s with SNR %F and RSSI %F, content: %s"), frameIndex++, time, callsign, snr, rssi, content);
         }
     }
 }
@@ -455,7 +462,7 @@ void System::planDfu() {
     timerDfu.restart();
 }
 
-void System::printJson(bool onUsb) {
+void System::printJson(const bool onUsb) {
     int16_t temperatureBattery = 0;
 
     if (settings.energy.type == mpptchg && !mpptChgCharger.getIndexedValue(VAL_INT_TEMP, &temperatureBattery)) {
@@ -473,63 +480,86 @@ void System::printJson(bool onUsb) {
                 .property(F("weather"), weatherThread->hasError())
             .endObject()
             .beginObject(F("energy"))
-                .property(F("nextRun"), (uint32_t) energyThread->timeBeforeRun() / 1000)
+                .property(F("nextRun"), static_cast<uint32_t>(energyThread->timeBeforeRun()) / 1000)
                 .property(F("voltageBattery"), energyThread->hasError() ? 0 : energyThread->getVoltageBattery())
                 .property(F("currentBattery"), energyThread->hasError() ? 0 : energyThread->getCurrentBattery())
                 .property(F("voltageSolar"), energyThread->hasError() ? 0 : energyThread->getVoltageSolar())
                 .property(F("currentSolar"), energyThread->hasError() ? 0 : energyThread->getCurrentBattery())
             .endObject()
             .beginObject(F("box"))
-                .property(F("temperatureRtc"), settings.rtc.enabled ? rtc.getTemperature() : 0)
-                .property(F("temperatureBattery"), settings.energy.type == mpptchg && !energyThread->hasError() ? temperatureBattery / 10.0 : 0)
-                .property(F("opened"), ldrBoxOpenedThread->isBoxOpened())
+                .property(F("temperatureRtc"), settings.rtc.enabled ? rtc.getTemperature() : 0);
+
+    if (settings.energy.type == mpptchg) {
+        json.property(F("temperatureBattery"), !energyThread->hasError() ? temperatureBattery / 10.0 : 0);
+    }
+
+    json.property(F("opened"), ldrBoxOpenedThread->isBoxOpened())
             .endObject()
             .beginObject(F("weather"))
-                .property(F("nextRun"), (uint32_t) weatherThread->timeBeforeRun() / 1000)
+                .property(F("nextRun"), static_cast<uint32_t>(weatherThread->timeBeforeRun()) / 1000)
                 .property(F("temperature"), weatherThread->enabled && !weatherThread->hasError() ? weatherThread->getTemperature() : 0)
                 .property(F("humidity"), weatherThread->enabled && !weatherThread->hasError() ? weatherThread->getHumidity() : 0)
                 .property(F("pressure"), weatherThread->enabled && !weatherThread->hasError() ? weatherThread->getPressure() : 0)
             .endObject()
             .beginObject(F("aprsSender"))
-                .property(F("sendPositionNextRun"), (uint32_t) sendPositionThread->timeBeforeRun() / 1000)
-                .property(F("sendTelemetriesNextRun"), (uint32_t) sendTelemetriesThread->timeBeforeRun() / 1000)
-                .property(F("sendStatusNextRun"), (uint32_t) sendStatusThread->timeBeforeRun() / 1000)
-                .property(F("meshtasticSendNextRun"), (uint32_t) meshtasticSendAprsThread->timeBeforeRun() / 1000)
-                .property(F("linuxSendNextRun"), (uint32_t) linuxSendAprsThread->timeBeforeRun() / 1000)
-            .endObject()
-            .beginObject(F("watchdog"))
-                .beginObject(F("mppt"))
-                    .property(F("nextRun"), (uint32_t) watchdogSlaveMpptChgThread->timeBeforeRun() / 1000)
-                    .property(F("lastFed"), (uint32_t) watchdogSlaveMpptChgThread->timeSinceFed() / 1000)
-                .endObject()
-                .beginObject(F("loraTx"))
-                    .property(F("nextRun"), (uint32_t) watchdogSlaveLoraTxThread->timeBeforeRun() / 1000)
-                    .property(F("lastFed"), (uint32_t) watchdogSlaveLoraTxThread->timeSinceFed() / 1000)
-                .endObject()
-                .beginObject(F("meshtastic"))
-                    .property(F("nextRun"), (uint32_t) watchdogMeshtastic->timeBeforeRun() / 1000)
-                    .property(F("lastFed"), (uint32_t) watchdogMeshtastic->timeSinceFed() / 1000)
-                .endObject()
-                .beginObject(F("linux"))
-                    .property(F("nextRun"), (uint32_t) watchdogLinux->timeBeforeRun() / 1000)
-                    .property(F("lastFed"), (uint32_t) watchdogLinux->timeSinceFed() / 1000)
-                .endObject()
-            .endObject()
+                .property(F("sendPositionNextRun"), static_cast<uint32_t>(sendPositionThread->timeBeforeRun()) / 1000)
+                .property(F("sendTelemetriesNextRun"), static_cast<uint32_t>(sendTelemetriesThread->timeBeforeRun()) / 1000)
+                .property(F("sendStatusNextRun"), static_cast<uint32_t>(sendStatusThread->timeBeforeRun()) / 1000);
+
+    if (sendMeshtasticAprsThread->enabled) {
+        json.property(F("sendMeshtasticNextRun"), static_cast<uint32_t>(sendMeshtasticAprsThread->timeBeforeRun()) / 1000);
+    }
+    if (sendLinuxAprsThread->enabled) {
+        json.property(F("sendMeshtasticNextRun"), static_cast<uint32_t>(sendLinuxAprsThread->timeBeforeRun()) / 1000);
+    }
+
+    json.endObject()
+            .beginObject(F("watchdog"));
+
+    if (settings.energy.type == mpptchg && watchdogSlaveMpptChgThread->enabled) {
+        json.beginObject(F("mppt"))
+                .property(F("nextRun"), static_cast<uint32_t>(watchdogSlaveMpptChgThread->timeBeforeRun()) / 1000)
+                .property(F("lastFed"), static_cast<uint32_t>(watchdogSlaveMpptChgThread->timeSinceFed()) / 1000)
+            .endObject();
+    }
+
+    if (watchdogSlaveLoraTxThread->enabled) {
+        json.beginObject(F("loraTx"))
+                .property(F("nextRun"), static_cast<uint32_t>(watchdogSlaveLoraTxThread->timeBeforeRun()) / 1000)
+                .property(F("lastFed"), static_cast<uint32_t>(watchdogSlaveLoraTxThread->timeSinceFed()) / 1000)
+            .endObject();
+    }
+
+    if (watchdogMeshtastic->enabled) {
+        json.beginObject(F("meshtastic"))
+                .property(F("nextRun"), static_cast<uint32_t>(watchdogMeshtastic->timeBeforeRun()) / 1000)
+                .property(F("lastFed"), static_cast<uint32_t>(watchdogMeshtastic->timeSinceFed()) / 1000)
+            .endObject();
+    }
+
+    if (watchdogLinux->enabled) {
+        json.beginObject(F("linux"))
+                .property(F("nextRun"), static_cast<uint32_t>(watchdogLinux->timeBeforeRun()) / 1000)
+                .property(F("lastFed"), static_cast<uint32_t>(watchdogLinux->timeSinceFed()) / 1000)
+            .endObject();
+    }
+
+    json.endObject()
             .beginArray(F("aprsReceived"));
 
     uint8_t frameIndex = 0;
-    for (auto frame : settings.aprsCallsignsHeard) {
-        if (strlen(frame.callsign) > 0) {
+    for (auto [callsign, time, rssi, snr, content] : settings.aprsCallsignsHeard) {
+        if (strlen(callsign) > 0) {
             if (frameIndex++ > 0) {
                 json.separator();
             }
 
             json.beginObject()
-            .property(F("callsign"), frame.callsign)
-                .property(F("time"), frame.time)
-                .property(F("packet"), frame.content)
-                .property(F("snr"), frame.snr)
-                .property(F("rssi"), frame.rssi)
+            .property(F("callsign"), callsign)
+                .property(F("time"), time)
+                .property(F("packet"), content)
+                .property(F("snr"), snr)
+                .property(F("rssi"), rssi)
             .endObject();
         }
     }
@@ -545,8 +575,8 @@ void System::setSlowClock() {
     isSlowClock = true;
 }
 
-GpioPin *System::getGpio(uint8_t pin) {
-    for (auto gpio : gpiosPin) {
+GpioPin *System::getGpio(const uint8_t pin) {
+    for (const auto gpio : gpiosPin) {
         if (gpio == nullptr) {
             continue;
         }

@@ -20,7 +20,7 @@ void I2CSlave::begin(System *system) {
         return;
     }
 
-    auto address = system->settings.meshtastic.i2cSlaveAddress;
+    const auto address = system->settings.meshtastic.i2cSlaveAddress;
 
     Wire1.begin(address);
     Wire1.onRequest(onRequest);
@@ -35,10 +35,10 @@ void I2CSlave::end() {
 }
 
 void I2CSlave::onRequest() {
-    Settings settings = system->settings;
+    const Settings settings = system->settings;
     uint32_t value = 0;
 
-    DateTime datetime = system->getDateTime();
+    const DateTime datetime = system->getDateTime();
 
     switch (currentRegToRead) {
         case REG_PING:
@@ -65,13 +65,13 @@ void I2CSlave::onRequest() {
             value = !system->energyThread->hasError() ? system->energyThread->getCurrentSolar() : 0;
             break;
         case REG_TEMPERATURE:
-            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? (int16_t) (system->weatherThread->getTemperature() * 100.0) : 0;
+            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? static_cast<int16_t>(system->weatherThread->getTemperature() * 100.0) : 0;
             break;
         case REG_PRESSURE:
-            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? (int16_t) system->weatherThread->getPressure() : 0;
+            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? static_cast<int16_t>(system->weatherThread->getPressure()) : 0;
             break;
         case REG_HUMIDITY:
-            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? (int16_t) system->weatherThread->getHumidity() : 0;
+            value = system->weatherThread->enabled && !system->weatherThread->hasError() ? static_cast<int16_t>(system->weatherThread->getHumidity()) : 0;
             break;
         case REG_SECONDS:
             value = datetime.second();
@@ -98,12 +98,12 @@ void I2CSlave::onRequest() {
 
     Log.infoln(F("[I2C_SLAVE] Send %d for register %x"), value, currentRegToRead);
 
-    Wire1.write((value >> 8) & 0xFF);
+    Wire1.write(value >> 8 & 0xFF);
     Wire1.write(value & 0xFF);
 }
 
 
-void I2CSlave::onReceive(int bytes) {
+void I2CSlave::onReceive(const int bytes) {
     Log.traceln(F("[I2C_SLAVE] Receive %d bytes"), bytes);
 
     if (bytes == 1) {

@@ -11,9 +11,7 @@ bool LdrBoxOpenedThread::runOnce() {
         return true;
     }
 
-    _isBoxOpened = ldr->getState();
-
-    if (_isBoxOpened) {
+    if (isBoxOpened()) {
         Log.warningln(F("[LDR_BOX_OPENED] LDR box opened !"));
 
         if (system->isInDebugMode()) {

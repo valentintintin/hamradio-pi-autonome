@@ -49,10 +49,11 @@ public:
     }
 
     inline bool isInDebugMode() const {
-        return isSlowClock;
+        return !isSlowClock;
     }
 
     Settings settings{};
+    SettingsAprsCallsignHeard *lastAprsHeard = nullptr;
 
     LdrBoxOpenedThread *ldrBoxOpenedThread{};
     EnergyThread *energyThread{};
@@ -62,12 +63,12 @@ public:
     SendPositionThread *sendPositionThread{};
     SendStatusThread *sendStatusThread{};
     SendTelemetriesThread *sendTelemetriesThread{};
-    MeshtasticSendAprsThread *meshtasticSendAprsThread{};
-    LinuxSendAprsThread *linuxSendAprsThread{};
+    MeshtasticSendAprsThread *sendMeshtasticAprsThread{};
+    LinuxSendAprsThread *sendLinuxAprsThread{};
 
     Communication communication;
     Command command;
-    GpioPin gpioLed = GpioPin(LED_BUILTIN);
+    GpioPin gpioLed = GpioPin(LED_BUILTIN, OUTPUT_2MA);
     GpioPin *gpiosPin[MAX_GPIO_USED]{};
 
     mpptChg mpptChgCharger;
@@ -79,7 +80,7 @@ public:
 
     DS3231 rtc;
 private:
-    bool isSlowClock;
+    bool isSlowClock = false;
     ThreadController threadController;
     Timer timerDfu = Timer(TIME_BEFORE_REBOOT);
     Timer timerReboot = Timer(TIME_BEFORE_REBOOT);

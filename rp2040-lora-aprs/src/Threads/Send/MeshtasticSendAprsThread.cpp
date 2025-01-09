@@ -11,6 +11,6 @@ bool MeshtasticSendAprsThread::runOnce() {
                                           system->watchdogMeshtastic->isFed() || force);
 }
 
-bool MeshtasticSendAprsThread::shouldRun(unsigned long time) {
+bool MeshtasticSendAprsThread::shouldRun(const unsigned long time) {
     return SendThread::shouldRun(time) && system->watchdogMeshtastic->enabled;
 }

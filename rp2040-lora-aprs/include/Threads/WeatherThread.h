@@ -4,8 +4,6 @@
 #include "vt_bme280"
 
 #include "MyThread.h"
-#include "config.h"
-#include "Timer.h"
 
 using namespace vt;
 

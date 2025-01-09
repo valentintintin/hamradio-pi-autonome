@@ -7,7 +7,7 @@ EnergyMpptChgThread::EnergyMpptChgThread(System *system) : EnergyThread(system, 
 }
 
 bool EnergyMpptChgThread::init() {
-    SettingsEnergy settings = system->settings.energy;
+    const SettingsEnergy settings = system->settings.energy;
     return charger->begin() && setPowerOnOff(settings.mpptPowerOffVoltage, settings.mpptPowerOnVoltage);
 }
 
@@ -36,7 +36,7 @@ bool EnergyMpptChgThread::fetchOthersData() {
     return charger->isNight(&_isNight) && charger->getStatusValue(SYS_STATUS, &status);
 }
 
-bool EnergyMpptChgThread::setPowerOnOff(uint16_t powerOnVoltage, uint16_t powerOffVoltage) {
+bool EnergyMpptChgThread::setPowerOnOff(const uint16_t powerOnVoltage, const uint16_t powerOffVoltage) const {
     Log.infoln(F("[ENERGY_MPPTCHG] Power On : %dmV and Power Off : %dmV"), powerOnVoltage, powerOffVoltage);
 
     if (!charger->setConfigurationValue(CFG_PWR_ON_TH, powerOnVoltage)

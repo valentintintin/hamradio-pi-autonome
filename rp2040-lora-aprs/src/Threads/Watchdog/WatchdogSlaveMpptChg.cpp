@@ -40,7 +40,7 @@ bool WatchdogSlaveMpptChgThread::feed() {
     return true;
 }
 
-bool WatchdogSlaveMpptChgThread::setManagedByUser(uint64_t millis) {
+bool WatchdogSlaveMpptChgThread::setManagedByUser(const uint64_t millis) {
     if (millis == 0) {
         managedByUser = true;
         return charger->setWatchdogEnable(false);
