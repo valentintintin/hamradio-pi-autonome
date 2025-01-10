@@ -98,14 +98,14 @@ bool System::begin() {
     watchdogSlaveLoraTxThread = new WatchdogSlaveLoraTxThread(this);
     threadController.add(watchdogSlaveLoraTxThread);
 
-    auto *gpioMeshtastic = new GpioPin(settings.meshtastic.pin, OUTPUT_2MA, false, false, true);
+    auto *gpioMeshtastic = new GpioPin(settings.meshtastic.pin, OUTPUT_2MA, false, false, settings.meshtastic.watchdogEnabled);
     gpiosPin[gpioI++] = gpioMeshtastic;
-    watchdogMeshtastic = new WatchdogMasterPinThread(this, gpioMeshtastic, settings.meshtastic.intervalTimeoutWatchdog, settings.meshtastic.watchdogEnabled);
+    watchdogMeshtastic = new WatchdogMasterPinThread(this, PSTR("MESHTASTIC"), gpioMeshtastic, settings.meshtastic.intervalTimeoutWatchdog, settings.meshtastic.watchdogEnabled);
     threadController.add(watchdogMeshtastic);
 
-    auto *gpioLinuxBoard = new GpioPin(settings.linux.pin, OUTPUT_2MA, false, false, true);
+    auto *gpioLinuxBoard = new GpioPin(settings.linux.pin, OUTPUT_2MA, false, false, settings.linux.watchdogEnabled);
     gpiosPin[gpioI++] = gpioLinuxBoard;
-    watchdogLinux = new WatchdogMasterPinThread(this, gpioLinuxBoard, settings.linux.intervalTimeoutWatchdog, settings.linux.watchdogEnabled);
+    watchdogLinux = new WatchdogMasterPinThread(this, PSTR("LINUX"), gpioLinuxBoard, settings.linux.intervalTimeoutWatchdog, settings.linux.watchdogEnabled);
     threadController.add(watchdogLinux);
 
     gpiosPin[gpioI++] = new GpioPin(settings.linux.nprPin, OUTPUT_12MA, false, true);
@@ -289,7 +289,7 @@ void System::setDefaultSettings() {
     settings.lora.spreadingFactor = 12;
     settings.lora.codingRate = 5;
     settings.lora.outputPower = 12;
-    settings.lora.txEnabled = true;
+    settings.lora.txEnabled = !isInDebugMode();
     settings.lora.watchdogTxEnabled = true;
     settings.lora.intervalTimeoutWatchdogTx = 720000; // 2 hours
 
@@ -469,9 +469,10 @@ void System::printJson(const bool onUsb) {
         Log.warningln(F("[SYSTEM] Impossible to get MPPT Temperature"));
     }
 
+    const bool isBoxOpened = ldrBoxOpenedThread->isBoxOpened(); // Here to avoir log serial
     JsonWriter *jsonWriter = onUsb ? (isSlowClock ? &serialLowPowerJsonWriter : &serialJsonWriter) : &serialLinuxJsonWriter;
 
-    auto json = jsonWriter->beginObject()
+    auto json = &jsonWriter->beginObject()
             .property(F("uptime"), millis() / 1000)
             .property(F("time"), getDateTime().unixtime())
             .beginObject(F("errors"))
@@ -490,10 +491,10 @@ void System::printJson(const bool onUsb) {
                 .property(F("temperatureRtc"), settings.rtc.enabled ? rtc.getTemperature() : 0);
 
     if (settings.energy.type == mpptchg) {
-        json.property(F("temperatureBattery"), !energyThread->hasError() ? temperatureBattery / 10.0 : 0);
+        json = &json->property(F("temperatureBattery"), !energyThread->hasError() ? temperatureBattery / 10.0 : 0);
     }
 
-    json.property(F("opened"), ldrBoxOpenedThread->isBoxOpened())
+    json = &json->property(F("opened"), isBoxOpened)
             .endObject()
             .beginObject(F("weather"))
                 .property(F("nextRun"), static_cast<uint32_t>(weatherThread->timeBeforeRun()) / 1000)
@@ -507,54 +508,53 @@ void System::printJson(const bool onUsb) {
                 .property(F("sendStatusNextRun"), static_cast<uint32_t>(sendStatusThread->timeBeforeRun()) / 1000);
 
     if (sendMeshtasticAprsThread->enabled) {
-        json.property(F("sendMeshtasticNextRun"), static_cast<uint32_t>(sendMeshtasticAprsThread->timeBeforeRun()) / 1000);
+        json = &json->property(F("sendMeshtasticNextRun"), static_cast<uint32_t>(sendMeshtasticAprsThread->timeBeforeRun()) / 1000);
     }
     if (sendLinuxAprsThread->enabled) {
-        json.property(F("sendMeshtasticNextRun"), static_cast<uint32_t>(sendLinuxAprsThread->timeBeforeRun()) / 1000);
+        json = &json->property(F("sendMeshtasticNextRun"), static_cast<uint32_t>(sendLinuxAprsThread->timeBeforeRun()) / 1000);
     }
 
-    json.endObject()
+    json = &json->endObject()
             .beginObject(F("watchdog"));
 
     if (settings.energy.type == mpptchg && watchdogSlaveMpptChgThread->enabled) {
-        json.beginObject(F("mppt"))
+        json = &json->beginObject(F("mppt"))
                 .property(F("nextRun"), static_cast<uint32_t>(watchdogSlaveMpptChgThread->timeBeforeRun()) / 1000)
                 .property(F("lastFed"), static_cast<uint32_t>(watchdogSlaveMpptChgThread->timeSinceFed()) / 1000)
             .endObject();
     }
 
     if (watchdogSlaveLoraTxThread->enabled) {
-        json.beginObject(F("loraTx"))
+        json = &json->beginObject(F("loraTx"))
                 .property(F("nextRun"), static_cast<uint32_t>(watchdogSlaveLoraTxThread->timeBeforeRun()) / 1000)
                 .property(F("lastFed"), static_cast<uint32_t>(watchdogSlaveLoraTxThread->timeSinceFed()) / 1000)
             .endObject();
     }
 
     if (watchdogMeshtastic->enabled) {
-        json.beginObject(F("meshtastic"))
+        json = &json->beginObject(F("meshtastic"))
                 .property(F("nextRun"), static_cast<uint32_t>(watchdogMeshtastic->timeBeforeRun()) / 1000)
                 .property(F("lastFed"), static_cast<uint32_t>(watchdogMeshtastic->timeSinceFed()) / 1000)
             .endObject();
     }
 
     if (watchdogLinux->enabled) {
-        json.beginObject(F("linux"))
+        json = &json->beginObject(F("linux"))
                 .property(F("nextRun"), static_cast<uint32_t>(watchdogLinux->timeBeforeRun()) / 1000)
                 .property(F("lastFed"), static_cast<uint32_t>(watchdogLinux->timeSinceFed()) / 1000)
             .endObject();
     }
 
-    json.endObject()
-            .beginArray(F("aprsReceived"));
+    json = &json->endObject().beginArray(F("aprsReceived"));
 
     uint8_t frameIndex = 0;
     for (auto [callsign, time, rssi, snr, content] : settings.aprsCallsignsHeard) {
         if (strlen(callsign) > 0) {
             if (frameIndex++ > 0) {
-                json.separator();
+                json = &json->separator();
             }
 
-            json.beginObject()
+            json = &json->beginObject()
             .property(F("callsign"), callsign)
                 .property(F("time"), time)
                 .property(F("packet"), content)
@@ -564,7 +564,7 @@ void System::printJson(const bool onUsb) {
         }
     }
 
-    json.endArray().endObject();
+    json->endArray().endObject();
 
     if (onUsb) {
         Serial.println();

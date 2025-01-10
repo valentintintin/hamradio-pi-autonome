@@ -1,7 +1,7 @@
 #include "Threads/WatchdogThread.h"
 
 WatchdogThread::WatchdogThread(System *system, const unsigned long interval, const char *name, const bool enabled) : MyThread(system, interval, name, false, enabled) {
-    force = true;
+    force = enabled;
 }
 
 bool WatchdogThread::shouldRun(const unsigned long time) {

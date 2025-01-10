@@ -7,7 +7,7 @@
 
 class WatchdogMasterPinThread : public WatchdogThread {
 public:
-    explicit WatchdogMasterPinThread(System *system, GpioPin *gpio, unsigned long intervalCheck, bool enabled);
+    explicit WatchdogMasterPinThread(System *system, const char* name, GpioPin *gpio, unsigned long intervalCheck, bool enabled);
     void sleep(uint64_t millis);
     bool feed() override;
 

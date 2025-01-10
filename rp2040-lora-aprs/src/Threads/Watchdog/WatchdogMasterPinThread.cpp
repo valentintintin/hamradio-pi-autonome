@@ -4,8 +4,12 @@
 #include "System.h"
 #include "utils.h"
 
-WatchdogMasterPinThread::WatchdogMasterPinThread(System *system, GpioPin *gpio, const unsigned long intervalCheck, const bool enabled):
+WatchdogMasterPinThread::WatchdogMasterPinThread(System *system, const char* name, GpioPin *gpio, const unsigned long intervalCheck, const bool enabled):
 WatchdogThread(system, intervalCheck, PSTR("WATCHDOG_PIN"), enabled), gpio(gpio) {
+    ThreadName.concat('_');
+    ThreadName.concat(gpio->getPin());
+    ThreadName.concat('_');
+    ThreadName.concat(name);
 }
 
 bool WatchdogMasterPinThread::runOnce() {
